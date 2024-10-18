@@ -323,6 +323,7 @@ namespace Agora
                 if (!esp_now_is_peer_exist(sender.mac))
                 {
                     Serial.println("register peer");
+                    memset(&peerInfo, 0, sizeof(peerInfo));
                     peerInfo.channel = WiFi.channel();
                     peerInfo.encrypt = false;
                     memcpy(peerInfo.peer_addr, sender.mac, 6);
@@ -412,6 +413,7 @@ namespace Agora
             if (!esp_now_is_peer_exist(sender.mac))
             {
                 Serial.println("register peer");
+                memset(&peerInfo, 0, sizeof(peerInfo));
                 peerInfo.channel = WiFi.channel();
                 peerInfo.encrypt = false;
                 memcpy(peerInfo.peer_addr, sender.mac, 6);

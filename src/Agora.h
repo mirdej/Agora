@@ -47,13 +47,19 @@ namespace Agora
     void tell(const char *text);
     void tell(uint8_t *buf, int len);
     void tell(const char *name, uint8_t *buf, int len);
+    void establish(const char *name);
     void establish(const char *name, esp_now_recv_cb_t cb);
     void join(const char *name, esp_now_recv_cb_t cb);
     void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+    void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len){;}
 
     //-----------------------------------------------------------------------------------------------------------------------------
     //-----------------------------------------------------------------------------------------------------------------------------
     //                                                                                            IMPLEMENTATION
+    void establish(const char *name)
+    {
+        establish(name, dummyCallback);
+    }
 
     void establish(const char *name, esp_now_recv_cb_t cb)
     {
@@ -63,6 +69,7 @@ namespace Agora
         newtribe.guru.macAddress.setLocal(); // TODO THIS DOES NOT FUNCTION !!!!
         tribes.push_back(newtribe);
     }
+
     //-----------------------------------------------------------------------------------------------------------------------------
 
     void join(const char *name, esp_now_recv_cb_t cb)

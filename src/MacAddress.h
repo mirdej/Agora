@@ -12,8 +12,6 @@ MIT License
 
 */
 
-namespace Agora
-{
     struct MAC_Address
     {
     public:
@@ -92,6 +90,6 @@ namespace Agora
         sprintf(macStr, "{0x%02X, 0x%02X ,0x%02X, 0x%02X, 0x%02X ,0x%02X}", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         return String(macStr);
     }
-}
+
 
 #endif

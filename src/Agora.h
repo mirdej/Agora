@@ -235,7 +235,7 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
 
 #else
 
-void generalCallback(esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
+void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
 {
     MAC_Address sender(esp_now_info->src_addr);
  // log_message(macAddr, incomingData, len);
@@ -264,6 +264,7 @@ void generalCallback(esp_now_recv_info_t *esp_now_info, const uint8_t *incomingD
     Serial.print(" from: ");
     Serial.println(sender.toString());
 }
+
 #endif
 
    

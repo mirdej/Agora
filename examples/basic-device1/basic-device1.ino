@@ -10,15 +10,15 @@ void setup()
     Serial.begin(115200);
 
     // Join the Agora as an anonymous device
-    Agora::begin();
+    Agora.begin();
 
     // Establish a named cult and register its callback function
-    Agora::establish("Mycult", callback);
+    Agora.establish("Mycult", callback);
 }
 
 void loop()
 {
     //Send a message to all followers (if there are any)
-    Agora::tell("It's so easy");
+    Agora.tell("It's so easy");
     delay(2000);
 }

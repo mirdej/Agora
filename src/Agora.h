@@ -5,6 +5,12 @@
   MIT License
   */
 
+#include "esp_idf_version.h"
+#include <esp_now.h>
+
+
+
+
 #ifndef __Agora_INCLUDED__
 #define __Agora_INCLUDED__
 
@@ -14,10 +20,21 @@
 #define AGORA_PING_INTERVAL AGORA_TASK_IDLE_TIME_MS
 
 void agoraTask(void *);
-void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
+
 void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len) { ; }
 
 
+#if ESP_IDF_VERSION_MAJOR < 5 
+void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+#else
+void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
+#endif
+
+#ifdef esp_now_recv_info_t
+#pragma message("C Preprocessor got here too!")
+
+#endif
 
 struct AgoraMessage
 {
@@ -41,7 +58,7 @@ const uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //{0x2
 #include "WiFi.h"
 #include <esp_now.h>
 #include <esp_wifi.h>
-    esp_now_peer_info_t peerInfo;
+esp_now_peer_info_t peerInfo;
 
 struct TheAgora
 {
@@ -55,14 +72,13 @@ public:
     void tell(uint8_t *buf, int len);
     void tell(const char *name, uint8_t *buf, int len);
     void establish(const char *name);
-    void establish(const char *name, esp_now_recv_cb_t cb);
+    void establish(const char *name, agora_cb_t cb);
     void join(const char *name);
-    void join(const char *name, esp_now_recv_cb_t cb);
+    void join(const char *name, agora_cb_t cb);
     int connected();
 };
 
 TheAgora Agora;
-
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -72,7 +88,7 @@ void TheAgora::establish(const char *name)
     TheAgora::establish(name, dummyCallback);
 }
 
-void TheAgora::establish(const char *name, esp_now_recv_cb_t cb)
+void TheAgora::establish(const char *name, agora_cb_t cb)
 {
     Tribe newtribe(name, cb);
     newtribe.myself.status = GURU;
@@ -88,7 +104,7 @@ void TheAgora::join(const char *name)
     join(name, dummyCallback);
 }
 
-void TheAgora::join(const char *name, esp_now_recv_cb_t cb)
+void TheAgora::join(const char *name, agora_cb_t cb)
 {
     Tribe newtribe(name, cb);
     // newtribe.myself.mac = me.mac;
@@ -184,18 +200,49 @@ int TheAgora::connected()
     Serial.println();
 } */
 
-
-
-
 //-----------------------------------------------------------------------------------------------------------------------------
 // callback function that will be executed when data is received
+#if ESP_IDF_VERSION_MAJOR < 5 
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
-    // log_message(macAddr, incomingData, len);
+    MAC_Address sender(macAddr);
+     // log_message(macAddr, incomingData, len);
+     for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
+     {
+ 
+         if (Agora.tribes[i].handleMessage(macAddr, incomingData, len))
+         {
+             //   log_v("Tribe %d %s: TRUE", i, tribes[i].name);
+             return;
+         }
+         /*   else
+           {
+               log_v("Tribe %d %s: FALSE", i, tribes[i].name);
+           } */
+     }
+     /*  Serial.println("\n\n");
+      return; */
+     Serial.println("MESSAGE NOT HANDLED:");
+ 
+     log_v("Mess len %d: ", len);
+     for (int i = 0; i < len; i++)
+     {
+         Serial.write(incomingData[i]);
+     }
+     Serial.print(" from: ");
+     Serial.println(sender.toString());
+ }
+
+#else
+
+void generalCallback(esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
+{
+    MAC_Address sender(esp_now_info->src_addr);
+ // log_message(macAddr, incomingData, len);
     for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
     {
 
-        if (Agora.tribes[i].handleMessage(macAddr, incomingData, len))
+        if (Agora.tribes[i].handleMessage(esp_now_info->src_addr, incomingData, len))
         {
             //   log_v("Tribe %d %s: TRUE", i, tribes[i].name);
             return;
@@ -208,7 +255,6 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
     /*  Serial.println("\n\n");
      return; */
     Serial.println("MESSAGE NOT HANDLED:");
-    MAC_Address sender(macAddr);
 
     log_v("Mess len %d: ", len);
     for (int i = 0; i < len; i++)
@@ -218,7 +264,9 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
     Serial.print(" from: ");
     Serial.println(sender.toString());
 }
+#endif
 
+   
 
 /*-----------------------------------------------------------------------------------------------------------------------------
     Start Agora Task:
@@ -247,10 +295,6 @@ void TheAgora::begin(const char *name)
         1,            // Priority at which the task is created.
         NULL);
 }
-
-
-
-
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Agora Task
@@ -309,9 +353,5 @@ void agoraTask(void *)
         vTaskDelay(pdMS_TO_TICKS(delay_time));
     }
 }
-
-
-
-
 
 #endif

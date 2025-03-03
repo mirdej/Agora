@@ -18,6 +18,10 @@ MIT License
 #include <esp_now.h>
 #include <esp_wifi.h>
 
+
+
+
+
 esp_err_t error;
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -117,7 +121,7 @@ extern TribeMember me;
 struct Tribe
 {
 public:
-    Tribe(const char *tribename, esp_now_recv_cb_t cb);
+    Tribe(const char *tribename, agora_cb_t cb);
     char name[AGORA_MAX_TRIBE_NAME_CHARACTERS + 1]; // space for terminating NULL if LEN = MAXLEN
 
     void begin();
@@ -131,7 +135,7 @@ public:
     void addMember(char *name, MAC_Address mac);
     bool hasMember(MAC_Address mac);
 
-    esp_now_recv_cb_t callback;
+    agora_cb_t callback;
 
     TribeMember guru;
     TribeMember myself;
@@ -184,7 +188,7 @@ bool Tribe::hasMember(MAC_Address mac)
     return false;
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
-Tribe::Tribe(const char *tribename, esp_now_recv_cb_t cb)
+Tribe::Tribe(const char *tribename, agora_cb_t cb)
 {
     int len = strlen(tribename);
     log_v("Register tribe: %s, len %d", tribename, len);

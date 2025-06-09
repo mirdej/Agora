@@ -230,7 +230,7 @@ int Tribe::update(long timeout)
             if (millis() - members[i].time_of_last_sent_message > pingInterval)
             {
                 sendMessage(members[i].macAddress, AGORA_MESSAGE_PING);
-                log_v("Send ping");
+               // log_v("Send ping");
                 members[i].time_of_last_sent_message = millis();
             }
 
@@ -390,7 +390,7 @@ bool Tribe::handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingD
     else if (isMessage(incomingData, len, AGORA_MESSAGE_PONG))
     {
         // it's ok, we've already logged the timestamp. nothing more to do here
-        log_v("Got pong");
+        //log_v("Got pong");
 
         return true;
     }
@@ -481,7 +481,7 @@ bool Tribe::handleMessageAsMember(const uint8_t *macAddr, const uint8_t *incomin
     {
         myself.time_of_last_received_message = millis();
         //  log_v("Got ping'ed. %s", name);
-        log_v("Send pong");
+      //  log_v("Send pong");
 
         if (sendMessage(sender, AGORA_MESSAGE_PONG) != ESP_OK)
         {

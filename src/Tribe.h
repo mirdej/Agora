@@ -247,13 +247,26 @@ int Tribe::update(long timeout)
 
             if (millis() - members[i].time_of_last_received_message > 8 * pingInterval)
             {
-                log_e("Lost a member");
-                members[i].status = LOST;
+                if (members[i].status != LOST)
+                {
+                    log_e("Lost a member");
+                    members[i].status = LOST;
+                }
+            }
+            else
+            {
+                members[i].status = FOLLOWER;
             }
         }
         break;
 
     case LOST:
+    /*     if ( && (millis() - myself.time_of_last_received_message < 8 * pingInterval))
+        {
+              log_v("Found my GURU again !! Phew.");
+              myself.status = FOLLOWER;
+              return 1;
+        } */
         if (timeout && (millis() > myself.time_of_last_received_message + timeout))
         {
             return 0;
@@ -283,8 +296,11 @@ int Tribe::update(long timeout)
     case FOLLOWER:
         if (millis() - myself.time_of_last_received_message > 8 * pingInterval)
         {
-            log_e("Lost my GURU !!");
-            myself.status = LOST;
+            if (myself.status != LOST)
+            {
+                log_e("Lost my GURU !!");
+/*                 myself.status = LOST;
+ */            }
         }
         break;
     default:

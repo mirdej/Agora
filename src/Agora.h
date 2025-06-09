@@ -12,9 +12,11 @@
 #define __Agora_INCLUDED__
 
 #define AGORA_TASK_IDLE_TIME_MS 6000
+#define AGORA_TASK_AGGRESSIVE_SEARCH_TIME_MS 50
+#define AGORA_TASK_AGGRESSIVE_SEARCH_PERIOD 7200
+
 #define AGORA_MAX_TRIBE_NAME_CHARACTERS 32
 #define AGORA_ANON_NAME "Anon"
-#define AGORA_PING_INTERVAL AGORA_TASK_IDLE_TIME_MS
 
 void agoraTask(void *);
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
@@ -76,6 +78,7 @@ public:
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
+    void setPingInterval(long ms);
     int connected();
 };
 
@@ -84,6 +87,16 @@ TheAgora Agora;
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            IMPLEMENTATION
+
+void TheAgora::setPingInterval(long ms)
+{
+    interval = ms < 100 ? 100 : ms;
+    for (std::size_t i = 0; i < tribes.size(); ++i)
+    {
+        tribes[i].pingInterval = interval;
+    }
+}
+
 void TheAgora::establish(const char *name)
 {
     TheAgora::establish(name, dummyCallback);
@@ -95,6 +108,7 @@ void TheAgora::establish(const char *name, agora_cb_t cb)
     newtribe.myself.status = GURU;
     newtribe.myself.macAddress.setLocal();
     newtribe.guru.macAddress.setLocal(); // TODO THIS DOES NOT FUNCTION !!!!
+    newtribe.pingInterval = interval;
     tribes.push_back(newtribe);
 }
 
@@ -113,7 +127,7 @@ void TheAgora::join(const char *name, agora_cb_t cb)
 
     strncpy(newtribe.myself.name, me.name, AGORA_MAX_TRIBE_NAME_CHARACTERS);
     newtribe.myself.macAddress.setLocal();
-
+    newtribe.pingInterval = interval;
     tribes.push_back(newtribe);
 }
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -280,7 +294,7 @@ void TheAgora::begin()
 
 void TheAgora::begin(const char *name)
 {
-
+    interval = AGORA_TASK_IDLE_TIME_MS;
     strncpy(me.name, name, AGORA_MAX_TRIBE_NAME_CHARACTERS);
     me.name[AGORA_MAX_TRIBE_NAME_CHARACTERS] = 0;
 
@@ -340,23 +354,32 @@ void agoraTask(void *)
     while (1)
     {
         int active_tribes = 0;
+        int searching_tribes = 0;
+        int delay_time = Agora.interval > 0 ? Agora.interval : AGORA_TASK_IDLE_TIME_MS;
+/*         delay_time += (esp_random() >> 20);
+ */
         for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
         {
-            active_tribes += Agora.tribes[i].update( Agora.timeout);
+            active_tribes += Agora.tribes[i].update(Agora.timeout);
+            if (Agora.tribes[i].myself.status == LOST)
+            {
+                if (millis() < AGORA_TASK_AGGRESSIVE_SEARCH_PERIOD)
+                {
+                    delay_time = AGORA_TASK_AGGRESSIVE_SEARCH_TIME_MS;
+                }
+            }
         }
 
         if (!active_tribes)
         {
             if (Agora.timeout && millis() > Agora.timeout)
             {
-                    log_v("\n\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
-                    vTaskDelete(NULL);
+                log_v("\n\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
+                vTaskDelete(NULL);
             }
         }
         // fullPicture();
-        int delay_time = AGORA_TASK_IDLE_TIME_MS;
-        delay_time += (esp_random() >> 20);
-        //  log_v("delay_time %d", delay_time);
+     //   log_v("delay_time %d", delay_time);
         vTaskDelay(pdMS_TO_TICKS(delay_time));
     }
 }

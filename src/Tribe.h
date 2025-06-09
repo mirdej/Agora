@@ -137,6 +137,7 @@ public:
     agora_cb_t callback;
     int channel;
     int connect_fail_count;
+    long pingInterval;
 
     TribeMember guru;
     TribeMember myself;
@@ -202,6 +203,7 @@ Tribe::Tribe(const char *tribename, agora_cb_t cb)
     name[len] = 0; // terminating null
     callback = cb;
     channel = WiFi.channel();
+    pingInterval = AGORA_TASK_IDLE_TIME_MS;
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------
@@ -225,13 +227,14 @@ int Tribe::update(long timeout)
         // Serial.println("Looking for followers");
         for (std::size_t i = 0; i < members.size(); ++i)
         {
-            if (millis() - members[i].time_of_last_sent_message > AGORA_PING_INTERVAL)
+            if (millis() - members[i].time_of_last_sent_message > pingInterval)
             {
                 sendMessage(members[i].macAddress, AGORA_MESSAGE_PING);
+                log_v("Send ping");
                 members[i].time_of_last_sent_message = millis();
             }
 
-            if (millis() - members[i].time_of_last_received_message > 4 * AGORA_PING_INTERVAL)
+            if (millis() - members[i].time_of_last_received_message > 3 * pingInterval)
             {
                 log_e("Lost a member");
                 members[i].status = LOST;
@@ -250,6 +253,7 @@ int Tribe::update(long timeout)
             {
                 channel++;
                 channel %= MAX_CHANNEL;
+                channel = (channel == 0) ? 1 : channel;
                 Serial.printf("\n\nConnection failed %d times. Trying next channel: %d", connect_fail_count, channel);
                 connect_fail_count = 0;
                 ESP_ERROR_CHECK(esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE));
@@ -260,12 +264,13 @@ int Tribe::update(long timeout)
                 esp_now_del_peer(BROADCAST_ADDRESS);
                 addPeer(BROADCAST_ADDRESS, channel);
             }
+            log_v("Sending %s", AGORA_MESSAGE_LOST.string);
             sendMessage(MAC_Address(BROADCAST_ADDRESS), AGORA_MESSAGE_LOST, name);
             connect_fail_count++;
         }
         break;
     case FOLLOWER:
-        if (millis() - myself.time_of_last_received_message > 4 * AGORA_PING_INTERVAL)
+        if (millis() - myself.time_of_last_received_message > 3 * pingInterval)
         {
             log_e("Lost my GURU !!");
             myself.status = LOST;
@@ -385,6 +390,8 @@ bool Tribe::handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingD
     else if (isMessage(incomingData, len, AGORA_MESSAGE_PONG))
     {
         // it's ok, we've already logged the timestamp. nothing more to do here
+        log_v("Got pong");
+
         return true;
     }
 
@@ -474,6 +481,8 @@ bool Tribe::handleMessageAsMember(const uint8_t *macAddr, const uint8_t *incomin
     {
         myself.time_of_last_received_message = millis();
         //  log_v("Got ping'ed. %s", name);
+        log_v("Send pong");
+
         if (sendMessage(sender, AGORA_MESSAGE_PONG) != ESP_OK)
         {
             log_e("Failed to send to peer: %s", esp_err_to_name(error));

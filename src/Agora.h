@@ -117,26 +117,23 @@ void TheAgora::join(const char *name, agora_cb_t cb)
 
 void TheAgora::tell(const char *text)
 {
-    if (tribes.size())
+
+    int len = strlen(text);
+    if (len > 249)
     {
-        int len = strlen(text);
-        if (len > 249)
-        {
-            len = 249;
-        }
-        uint8_t buf[len];
-        strncpy((char *)buf, text, len);
-        {
-            tribes[0].tell(buf, len);
-        }
+        log_v("Message truncated (was %d bytes, now 249)", len);
+        len = 249;
     }
+    uint8_t buf[len];
+    strncpy((char *)buf, text, len);
+    tell(buf, len);
 }
 
 void TheAgora::tell(uint8_t *buf, int len)
 {
-    if (tribes.size())
+    for (std::size_t i = 0; i < tribes.size(); ++i)
     {
-        tribes[0].tell(buf, len);
+        tribes[i].tell(buf, len);
     }
 }
 
@@ -318,7 +315,7 @@ void agoraTask(void *)
     log_v("IP address: %s", WiFi.localIP().toString().c_str());
     log_v("MAC address: %s", WiFi.macAddress().c_str());
     log_v("WiFi channel: %d", WiFi.channel());
-    
+
     me.macAddress.setLocal();
 
     log_v("Init Callbacks");

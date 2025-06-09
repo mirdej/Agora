@@ -62,6 +62,7 @@ public:
     TribeMember me;
     std::vector<Tribe> tribes;
     long timeout;
+    long interval;
 
     void begin();
     void begin(const char *name);
@@ -348,7 +349,7 @@ void agoraTask(void *)
         {
             if (Agora.timeout && millis() > Agora.timeout)
             {
-                    log_v("\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
+                    log_v("\n\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
                     vTaskDelete(NULL);
             }
         }

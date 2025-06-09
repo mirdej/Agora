@@ -18,6 +18,8 @@ MIT License
 #include <esp_now.h>
 #include <esp_wifi.h>
 
+#define MAX_CHANNEL 13 // 11 in North America or 13 in Europe
+
 esp_err_t error;
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -130,8 +132,11 @@ public:
 
     void addMember(char *name, MAC_Address mac);
     bool hasMember(MAC_Address mac);
+    bool addPeer(const uint8_t *mac_addr, uint8_t chan);
 
     agora_cb_t callback;
+    int channel;
+    int connect_fail_count;
 
     TribeMember guru;
     TribeMember myself;
@@ -196,6 +201,7 @@ Tribe::Tribe(const char *tribename, agora_cb_t cb)
     memcpy(name, tribename, len);
     name[len] = 0; // terminating null
     callback = cb;
+    channel = WiFi.channel();
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------
@@ -240,7 +246,22 @@ int Tribe::update(long timeout)
         }
         else
         {
+            if (connect_fail_count > 3)
+            {
+                channel++;
+                channel %= MAX_CHANNEL;
+                Serial.printf("\n\nConnection failed %d times. Trying next channel: %d", connect_fail_count, channel);
+                connect_fail_count = 0;
+                ESP_ERROR_CHECK(esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE));
+                if (esp_now_init() != ESP_OK)
+                {
+                    Serial.println("Error initializing ESP-NOW");
+                }
+                esp_now_del_peer(BROADCAST_ADDRESS);
+                addPeer(BROADCAST_ADDRESS, channel);
+            }
             sendMessage(MAC_Address(BROADCAST_ADDRESS), AGORA_MESSAGE_LOST, name);
+            connect_fail_count++;
         }
         break;
     case FOLLOWER:
@@ -327,20 +348,11 @@ bool Tribe::handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingD
 
             esp_err_t error;
 
-            if (!esp_now_is_peer_exist(sender.mac))
+            if (!addPeer(sender.mac, channel))
             {
-                Serial.println("register peer");
-                memset(&peerInfo, 0, sizeof(peerInfo));
-                peerInfo.channel = WiFi.channel();
-                peerInfo.encrypt = false;
-                memcpy(peerInfo.peer_addr, sender.mac, 6);
-                error = esp_now_add_peer(&peerInfo);
-                if (error != ESP_OK)
-                {
-                    log_v("Failed to add peer: %s", esp_err_to_name(error));
-                    return false;
-                }
+                return false;
             }
+
             // error = esp_now_send(sender.mac, (uint8_t *)AGORA_MESSAGE_INVITE.string, AGORA_MESSAGE_INVITE.size);
             if (sendMessage(sender, AGORA_MESSAGE_INVITE) != ESP_OK)
             {
@@ -390,6 +402,24 @@ bool Tribe::handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingD
     // check if message is from a known member, if so, call this tribe's callback function
 }
 
+bool Tribe::addPeer(const uint8_t *mac_addr, uint8_t chan)
+{
+    if (!esp_now_is_peer_exist(mac_addr))
+    {
+        Serial.println("register peer");
+        memset(&peerInfo, 0, sizeof(peerInfo));
+        peerInfo.channel = WiFi.channel();
+        peerInfo.encrypt = false;
+        memcpy(peerInfo.peer_addr, mac_addr, 6);
+        error = esp_now_add_peer(&peerInfo);
+        if (error != ESP_OK)
+        {
+            log_e("Failed to add peer: %s", esp_err_to_name(error));
+            return false;
+        }
+    }
+    return true;
+}
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 bool Tribe::handleMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
@@ -417,19 +447,9 @@ bool Tribe::handleMessageAsMember(const uint8_t *macAddr, const uint8_t *incomin
     {
         log_v("%s wants PIX !! ;-o ", sender.toString().c_str());
 
-        if (!esp_now_is_peer_exist(sender.mac))
+        if (!addPeer(sender.mac, 0))
         {
-            Serial.println("register peer");
-            memset(&peerInfo, 0, sizeof(peerInfo));
-            peerInfo.channel = WiFi.channel();
-            peerInfo.encrypt = false;
-            memcpy(peerInfo.peer_addr, sender.mac, 6);
-            error = esp_now_add_peer(&peerInfo);
-            if (error != ESP_OK)
-            {
-                log_e("Failed to add peer: %s", esp_err_to_name(error));
-                return false;
-            }
+            return false;
         }
 
         if (sendMessage(sender, AGORA_MESSAGE_PRESENT, myself.name) != ESP_OK)
@@ -443,7 +463,7 @@ bool Tribe::handleMessageAsMember(const uint8_t *macAddr, const uint8_t *incomin
     if (isMessage(incomingData, len, AGORA_MESSAGE_WELCOME))
     {
         log_v("%s welcomes me", sender.toString().c_str());
-
+        log_v("Wifi channel: %d my channel %d", WiFi.channel(), channel);
         myself.status = FOLLOWER;
         guru.macAddress = sender;
         myself.time_of_last_received_message = millis();

@@ -7,6 +7,8 @@
 
 #include "esp_idf_version.h"
 #include <esp_now.h>
+#include "FS.h"
+#include "AgoraFTP.h"
 
 #ifndef __Agora_INCLUDED__
 #define __Agora_INCLUDED__
@@ -56,6 +58,7 @@ const uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; //{0x2
 #include "WiFi.h"
 #include <esp_now.h>
 #include <esp_wifi.h>
+
 esp_now_peer_info_t peerInfo;
 
 struct TheAgora
@@ -65,6 +68,7 @@ public:
     std::vector<Tribe> tribes;
     long timeout;
     long interval;
+    bool ftp_enabled;
 
     void begin();
     void begin(const char *name);
@@ -77,6 +81,13 @@ public:
     void join(const char *name);
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
+    void share(File file)
+    {
+        if (!ftp_enabled)
+            return;
+        file_to_share = file;
+        send_header();
+    };
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected();
@@ -218,6 +229,17 @@ int TheAgora::connected()
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
     MAC_Address sender(macAddr);
+    if (Agora.ftp_enabled)
+    {
+        if (handle_agora_ftp(macAddr, incomingData, len))
+        {
+            for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
+            {
+                Agora.tribes[i].ftpUpdate();
+            }
+            return;
+        }
+    }
     // log_message(macAddr, incomingData, len);
     for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
     {
@@ -251,6 +273,18 @@ void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *inc
 {
     MAC_Address sender(esp_now_info->src_addr);
     // log_message(macAddr, incomingData, len);
+    if (Agora.ftp_enabled)
+    {
+        if (handle_agora_ftp(esp_now_info->src_addr, incomingData, len))
+        {
+            for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
+            {
+                Agora.tribes[i].ftpUpdate();
+            }
+            return;
+        }
+    }
+
     for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
     {
 
@@ -356,8 +390,8 @@ void agoraTask(void *)
         int active_tribes = 0;
         int searching_tribes = 0;
         int delay_time = Agora.interval > 0 ? Agora.interval : AGORA_TASK_IDLE_TIME_MS;
-/*         delay_time += (esp_random() >> 20);
- */
+        /*         delay_time += (esp_random() >> 20);
+         */
         for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
         {
             active_tribes += Agora.tribes[i].update(Agora.timeout);
@@ -379,7 +413,7 @@ void agoraTask(void *)
             }
         }
         // fullPicture();
-     //   log_v("delay_time %d", delay_time);
+        //   log_v("delay_time %d", delay_time);
         vTaskDelay(pdMS_TO_TICKS(delay_time));
     }
 }

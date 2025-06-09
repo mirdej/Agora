@@ -18,10 +18,6 @@ MIT License
 #include <esp_now.h>
 #include <esp_wifi.h>
 
-
-
-
-
 esp_err_t error;
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -126,7 +122,7 @@ public:
 
     void begin();
     void end();
-    void update();
+    int update();
     void tell(uint8_t *buf, int len);
     bool handleMessage(const uint8_t *macAddr, const uint8_t *incomingData, int len);
     bool handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData, int len);
@@ -215,7 +211,7 @@ void Tribe::addMember(char *name, MAC_Address mac)
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------
-void Tribe::update()
+int Tribe::update()
 {
     switch (myself.status)
     {
@@ -238,7 +234,14 @@ void Tribe::update()
         break;
 
     case LOST:
-        sendMessage(MAC_Address(BROADCAST_ADDRESS), AGORA_MESSAGE_LOST, name);
+        if (Agora.timeout && millis() > myself.time_of_last_received_message + Agora.timeout)
+        {
+            return 0;
+        }
+        else
+        {
+            sendMessage(MAC_Address(BROADCAST_ADDRESS), AGORA_MESSAGE_LOST, name);
+        }
         break;
     case FOLLOWER:
         if (millis() - myself.time_of_last_received_message > 4 * AGORA_PING_INTERVAL)
@@ -250,6 +253,7 @@ void Tribe::update()
     default:
         break;
     }
+    return 1;
 }
 
 void log_message(const uint8_t *macAddr, const uint8_t *incomingData, int len)

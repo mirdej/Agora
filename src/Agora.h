@@ -61,6 +61,7 @@ struct TheAgora
 public:
     TribeMember me;
     std::vector<Tribe> tribes;
+    long timeout;
 
     void begin();
     void begin(const char *name);
@@ -73,6 +74,7 @@ public:
     void join(const char *name);
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
+    void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     int connected();
 };
 
@@ -336,12 +338,19 @@ void agoraTask(void *)
 
     while (1)
     {
-
+        int active_tribes = 0;
         for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
         {
-            Agora.tribes[i].update();
+            active_tribes += Agora.tribes[i].update();
         }
 
+        if (!active_tribes)
+        {
+            if (Agora.timeout && millis() > Agora.timeout)
+            {
+                    log_v("\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
+            }
+        }
         // fullPicture();
         int delay_time = AGORA_TASK_IDLE_TIME_MS;
         delay_time += (esp_random() >> 20);

@@ -341,7 +341,7 @@ void agoraTask(void *)
         int active_tribes = 0;
         for (std::size_t i = 0; i < Agora.tribes.size(); ++i)
         {
-            active_tribes += Agora.tribes[i].update();
+            active_tribes += Agora.tribes[i].update( Agora.timeout);
         }
 
         if (!active_tribes)
@@ -349,6 +349,7 @@ void agoraTask(void *)
             if (Agora.timeout && millis() > Agora.timeout)
             {
                     log_v("\nThere is nothing going on in the Agora. Bored to death.\nGiving up, bye.\n\n");
+                    vTaskDelete(NULL);
             }
         }
         // fullPicture();

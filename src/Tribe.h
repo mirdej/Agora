@@ -122,7 +122,7 @@ public:
 
     void begin();
     void end();
-    int update();
+    int update(long timeout);
     void tell(uint8_t *buf, int len);
     bool handleMessage(const uint8_t *macAddr, const uint8_t *incomingData, int len);
     bool handleMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData, int len);
@@ -211,7 +211,7 @@ void Tribe::addMember(char *name, MAC_Address mac)
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------------
-int Tribe::update()
+int Tribe::update(long timeout)
 {
     switch (myself.status)
     {
@@ -234,7 +234,7 @@ int Tribe::update()
         break;
 
     case LOST:
-        if (Agora.timeout && millis() > myself.time_of_last_received_message + Agora.timeout)
+        if (timeout && (millis() > myself.time_of_last_received_message + timeout))
         {
             return 0;
         }

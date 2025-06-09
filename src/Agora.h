@@ -81,6 +81,7 @@ public:
     void join(const char *name);
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
+    void useFileSystem(fs::FS &fs){Fileshare_Filesystem = fs;}
     void share(File file)
     {
         if (!ftp_enabled)

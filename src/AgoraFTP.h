@@ -26,7 +26,7 @@ File file_to_write;
 size_t total_bytes_to_receive;
 size_t bytes_to_receive;
 long file_transfer_start;
-FS Filesystem = SPIFFS;
+FS Fileshare_Filesystem = SPIFFS;
 
 //----------------------------------------------------------------------------------------
 
@@ -172,7 +172,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
 
             char filepath[100];
             sprintf(filepath, "/%s", esp_fileshare_header.filename);
-            file_to_write = Filesystem.open(filepath, "w");
+            file_to_write = Fileshare_Filesystem.open(filepath, "w");
             if (!file_to_write)
             {
                 Serial.printf("Error opening file for writing %s\n", filepath);

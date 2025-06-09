@@ -315,8 +315,10 @@ void agoraTask(void *)
 
     Serial.print("Wi-Fi Channel: ");
     Serial.println(WiFi.channel());
-    log_v("IP address: %s", WiFi.localIP().toString());
+    log_v("IP address: %s", WiFi.localIP().toString().c_str());
     log_v("MAC address: %s", WiFi.macAddress().c_str());
+    log_v("WiFi channel: %d", WiFi.channel());
+    
     me.macAddress.setLocal();
 
     log_v("Init Callbacks");

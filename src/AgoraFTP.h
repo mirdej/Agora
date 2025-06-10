@@ -143,7 +143,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                                         {
                      */
                     long timetaken = millis() - file_transfer_start;
-                    Serial.printf("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", esp_fileshare_header.filesize, timetaken / 1000, timetaken % 1000, esp_fileshare_header.filesize * 8000 / timetaken);
+                    Serial.printf("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", esp_fileshare_header.filesize, timetaken / 1000, timetaken % 1000, esp_fileshare_header.filesize * 8000 / timetaken / 1024);
                     memset(&esp_fileshare_header, 0, sizeof(esp_fileshare_header));
                     Serial.println();
                     //}

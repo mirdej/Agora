@@ -33,7 +33,6 @@ void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *inc
 #endif
 void AGORA_LOG_STATUS(long interval = 5000);
 
-
 typedef enum
 {
     UNKNOWN,
@@ -51,6 +50,7 @@ struct AgoraTribe
     long lastMessageSent;
     long lastMessageReceived;
     int channel;
+    agora_cb_t callback;
 };
 
 struct AgoraFriend
@@ -89,17 +89,20 @@ public:
     char includedBy[128];
 
     void begin();
-    void begin(const char *newname, const char * caller = __BASE_FILE__);
+    void begin(const char *newname, const char *caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
     void tell(const char *text);
+    void tell(const char *name,const char *text);
     void tell(uint8_t *buf, int len);
+    void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
+    void tell(const char *name, char *buf, int len) { tell(name, (uint8_t *)buf, len); }
     void establish(const char *name);
     void establish(const char *name, agora_cb_t cb);
     void join(const char *name);
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
-    char * getVersion();
+    char *getVersion();
     bool addFriend(AgoraFriend *newFriend);
 
     void rememberFriends();
@@ -122,7 +125,7 @@ private:
 
 extern TheAgora Agora;
 
-esp_err_t sendMessage(AgoraFriend * to, AgoraMessage message, char *name = (char *)"");
+esp_err_t sendMessage(AgoraFriend *to, AgoraMessage message, char *name = (char *)"");
 esp_err_t sendMessage(const uint8_t *macAddr, AgoraMessage message, char *name = (char *)"");
 esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name = (char *)"");
 int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData, int len);
@@ -157,7 +160,7 @@ bool EspNowAddPeer(const uint8_t *peer_addr);
 
 #define AGORA_LOG_E(msg, ...)                \
     {                                        \
-        Serial.print("  - AGORA ERROR: ");       \
+        Serial.print("  - AGORA ERROR: ");   \
         Serial.printf((msg), ##__VA_ARGS__); \
         Serial.println();                    \
     }

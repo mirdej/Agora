@@ -246,6 +246,7 @@ void TheAgora::establish(const char *name, agora_cb_t cb)
     memcpy(&newTribe.name, name, len);
     newTribe.meToThem = GURU;
     newTribe.channel = WiFi.channel();
+    newTribe.callback = cb;
     memcpy(&Agora.tribes[Agora.tribeCount], &newTribe, sizeof(AgoraTribe));
     Agora.tribeCount++;
 }
@@ -277,6 +278,7 @@ void TheAgora::join(const char *name, agora_cb_t cb)
     }
     memcpy(&newTribe.name, name, len);
     newTribe.meToThem = ASPIRING_FOLLOWER;
+    newTribe.callback = cb;
     memcpy(&Agora.tribes[Agora.tribeCount], &newTribe, sizeof(AgoraTribe));
     Agora.tribeCount++;
 }
@@ -285,16 +287,59 @@ void TheAgora::join(const char *name, agora_cb_t cb)
 
 void TheAgora::tell(const char *text)
 {
+    int len = strlen(text);
+    if (len > 249)
+    {
+        AGORA_LOG_E("Message truncated (was %d bytes, now 249)", len);
+        len = 249;
+    }
+    uint8_t buf[len];
+    memset(buf, 0, sizeof(buf));
+    strncpy((char *)buf, text, len);
+    tell(buf, len);
+}
+
+void TheAgora::tell(const char *name, const char *text)
+{
+    int len = strlen(text);
+    if (len > 249)
+    {
+        AGORA_LOG_E("Message truncated (was %d bytes, now 249)", len);
+        len = 249;
+    }
+    uint8_t buf[len];
+    memset(buf, 0, sizeof(buf));
+    strncpy((char *)buf, text, len);
+    tell(name, buf, len);
 }
 
 void TheAgora::tell(uint8_t *buf, int len)
 {
+    if (esp_now_send(NULL, buf, len) != ESP_OK)
+    {
+        AGORA_LOG_E("Error sending message to all members");
+    }
+    for (int i = 0; i < friendCount; i++)
+    {
+        friends[i].lastMessageSent = millis();
+    }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
 void TheAgora::tell(const char *name, uint8_t *buf, int len)
 {
+    for (int i = 0; i < friendCount; i++)
+    {
+        if (!strcmp(friends[i].name, name) || !strcmp(friends[i].tribe, name))
+        {
+            if (esp_now_send(friends[i].mac, buf, len) != ESP_OK)
+            {
+                AGORA_LOG_E("Error sending message to all members");
+            }
+            friends[i].lastMessageSent = millis();
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -669,11 +714,20 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         return 1;
     }
 
-    if (message_is_from_a_friend)
+    AgoraFriend *f = friendForMac(macAddr);
+    if (f)
     {
-        AGORA_LOG_V("Message from a member. Call Callback");
-        /*         callback(macAddr, incomingData, len); */
-        return 1;
+        AgoraTribe *theTribe = tribeNamed(f->tribe);
+        if (theTribe)
+        {
+            theTribe->callback(macAddr, incomingData, len);
+            return 1;
+        }
+        else
+        {
+            AGORA_LOG_E("Cannot find tribe %s", f->tribe);
+            return 0;
+        }
     }
     else
     {
@@ -809,15 +863,23 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         return 1;
     }
 
-    /* if (sender == guru.macAddress)
+    if (f)
     {
-        myself.time_of_last_received_message = millis();
-
-        callback(macAddr, incomingData, len);
-        //      AGORA_LOG_V("Message for me from GURU %s == %s", sender.toString().c_str(),guru.macAddress.toString().c_str());
-        return true;
+        AgoraTribe *theTribe = tribeNamed(f->tribe);
+        if (theTribe)
+        {
+            theTribe->callback(macAddr, incomingData, len);
+            return 1;
+        }
+        else
+        {
+            AGORA_LOG_E("Cannot find tribe %s", f->tribe);
+            return 0;
+        }
     }
-    AGORA_LOG_V("Not a message from my GURU. Dismissed"); */
+
+    AGORA_LOG_V("Message not handled. Len %u", len);
+
     return 0;
 }
 
@@ -968,7 +1030,7 @@ void lookForNewGurus()
                     if (!strcmp(Agora.friends[f].tribe, Agora.tribes[i].name))
                     {
                         Agora.tribes[i].meToThem = FOLLOWER;
-                        AGORA_LOG_V("Found my GURU for tribe %s: %%s", Agora.tribes[i].name, Agora.friends[f].name);
+                        AGORA_LOG_V("Found my GURU for tribe %s: %s", Agora.tribes[i].name, Agora.friends[f].name);
                         return;
                     }
                 }

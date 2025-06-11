@@ -83,6 +83,9 @@ public:
     int tribeCount;
     int wifiChannel;
     int connectedPercent;
+    bool logMessages;
+    bool logStatus;
+
 
     void begin();
     void begin(const char *newname);

@@ -571,11 +571,27 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             AGORA_LOG_MAC(macAddr);
             AGORA_LOG_V(" Send an invite. ")
 
-            if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
+            // INVITE MESSAGE takes 11 chars, tribename max 30
+            // Length of total message: 52, fill before-last-byte of message [50] with channel number
+            char buf[AGORA_MESSAGE_INVITE.size];
+            memset(buf, '.', sizeof(buf));
+            buf[AGORA_MESSAGE_INVITE.size - 1] = 0;
+            buf[AGORA_MESSAGE_INVITE.size - 2] = WiFi.channel();
+            sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
+            if (Agora.logMessages)
             {
-                AGORA_LOG_V("Failed to send to peer");
-                return 0;
+                ("Sending Message: %s", buf);
             }
+            AgoraFriend *f = friendForMac(macAddr);
+            if (f)
+                f->lastMessageSent = millis();
+            esp_now_send(macAddr, (uint8_t *)buf, AGORA_MESSAGE_INVITE.size);
+
+            /*   if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
+              {
+                  AGORA_LOG_V("Failed to send to peer");
+                  return 0;
+              } */
 
             AgoraFriend *knownFriend = friendForMac(macAddr);
             if (knownFriend)

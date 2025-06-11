@@ -1,9 +1,10 @@
 /*TODOS
 
-Tribe list does not get real updates
-POLICE MODE
+Tribe list does not get real updates (wifi channels ??)
 weird channels on follower side
-names don't always come through
+--> send channel with invite!!
+__BASE_FILE__ üath is no absolute
+
 
 */
 
@@ -24,9 +25,17 @@ AgoraMessage AGORA_MESSAGE_PRESENT = {"Hi, I'm ", 74};
 AgoraMessage AGORA_MESSAGE_WELCOME = {"I'm your guru: ", 82};
 AgoraMessage AGORA_MESSAGE_PING = {"Huh?", 4};
 AgoraMessage AGORA_MESSAGE_PONG = {"Ha!", 3};
+AgoraMessage AGORA_MESSAGE_POLICE = {"POLICE!Your ID Please!", 25};
 
 uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+const char *r_strings[] = {
+    "UNKNOWN   ",
+    "ASPIRING  ",
+    "CONTACTING",
+    "FOLLOWER  ",
+    "GURU      ",
+    "ABSENT    "};
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            LOGGING
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -47,23 +56,7 @@ void AGORA_LOG_MAC(const uint8_t *mac)
 
 void AGORA_LOG_RELATIONSHIP(relationship r)
 {
-    switch (r)
-    {
-    case GURU:
-        Serial.print("GURU      ");
-        break;
-    case FOLLOWER:
-        Serial.print("FOLLOWER  ");
-        break;
-    case ASPIRING_FOLLOWER:
-        Serial.print("ASPIRING  ");
-        break;
-    case IN_CONTACT:
-        Serial.print("CONTACTING");
-        break;
-    default:
-        Serial.print("UNKNOWN   ");
-    }
+    Serial.print(r_strings[r]);
 }
 void AGORA_LOG_FRIEND(AgoraFriend f)
 {
@@ -84,7 +77,7 @@ void AGORA_LOG_FRIEND(AgoraFriend *f)
 
 void AGORA_LOG_FRIEND_TABLE()
 {
-    Serial.println("\n\nFriends");
+    Serial.println("Friends");
     Serial.println("MAC ADDRESS       | Type       | Chan | Name                           | Tribe                          | Last seen | Last messaged");
     Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
     for (int i = 0; i < Agora.friendCount; i++)
@@ -116,7 +109,7 @@ void AGORA_LOG_FRIEND_TABLE()
 
 void AGORA_LOG_TRIBE_TABLE()
 {
-    Serial.println("\nTribes");
+    Serial.println("Tribes");
     Serial.println(" Type       | Chan | Name                           | Last seen | Last messaged");
     Serial.println("-----------------------------------------------------------------------------------");
     for (int i = 0; i < Agora.tribeCount; i++)
@@ -127,6 +120,7 @@ void AGORA_LOG_TRIBE_TABLE()
         Serial.printf("%4u | %30s | ", t.channel, t.name);
         Serial.printf("%9u | %9u\n", millis() - t.lastMessageReceived, millis() - t.lastMessageSent);
     }
+    Serial.println("-----------------------------------------------------------------------------------");
 }
 
 void AGORA_LOG_INCOMING_DATA(const uint8_t *d, int len)
@@ -145,9 +139,81 @@ void AGORA_LOG_STATUS(long interval)
     if (millis() - last_log > interval)
     {
         last_log = millis();
-        AGORA_LOG_FRIEND_TABLE();
+        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
         AGORA_LOG_TRIBE_TABLE();
+        Serial.println();
+        AGORA_LOG_FRIEND_TABLE();
+        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------\n\n\n");
     }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// This Task gets spawned if we are asked for ID by Agora-Police
+
+uint8_t policeMac[6] = {0, 0, 0, 0, 0, 0};
+
+void idTask(void *)
+{
+    randomSeed(analogRead(A0));
+    delay(random(3000));
+    char buf[240];
+
+    int hasPoliceMac = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        hasPoliceMac += policeMac[i];
+    }
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    snprintf(buf, 240, "Name:%s|Chip:%s|Flash:%u|FreeRam:%u|SDK:%s|IP:%s|Channel:%u|", Agora.name, ESP.getChipModel(), ESP.getFlashChipSize(), info.total_free_bytes, ESP.getSdkVersion(), WiFi.localIP().toString().c_str(), WiFi.channel());
+    Serial.println(buf);
+    if (hasPoliceMac)
+        esp_now_send(policeMac, (uint8_t *)buf, 240);
+
+    delay(100);
+
+    snprintf(buf, 240, "Friends:%u|Tribes:%u|AgoraVersion:%s|File:%s|Date:%s|", Agora.friendCount, Agora.tribeCount, Agora.getVersion(), Agora.includedBy, __DATE__);
+    Serial.println(buf);
+    if (hasPoliceMac)
+        esp_now_send(policeMac, (uint8_t *)buf, 240);
+
+    delay(100);
+
+    for (int i = 0; i < Agora.tribeCount; i++)
+    {
+        AgoraTribe t = Agora.tribes[i];
+        snprintf(buf, 240, "Tribe:%s|%u|%s|%u|%u", t.name, t.channel, r_strings[t.meToThem], millis() - t.lastMessageReceived, millis() - t.lastMessageSent);
+        Serial.println(buf);
+        if (hasPoliceMac)
+            esp_now_send(policeMac, (uint8_t *)buf, 240);
+        delay(30);
+    }
+
+    for (int i = 0; i < Agora.friendCount; i++)
+    {
+        AgoraFriend f = Agora.friends[i];
+
+        snprintf(buf, 240, "Friend:%02x:%02x:%02x:%02x:%02x:%02x|%u|%s|%s|%s|%u|%u",
+                 f.mac[0], f.mac[1], f.mac[2], f.mac[3], f.mac[4], f.mac[5],
+                 f.channel, f.name, f.tribe, r_strings[f.meToThem], millis() - f.lastMessageReceived, millis() - f.lastMessageSent);
+        Serial.println(buf);
+        if (hasPoliceMac)
+            esp_now_send(policeMac, (uint8_t *)buf, 240);
+        delay(30);
+    }
+
+    vTaskDelete(NULL);
+}
+void TheAgora::showID()
+{
+    AGORA_LOG_V("Ooops the cops!! Show my ID. ")
+    xTaskCreate(idTask, "Police", 8192, NULL, 1, NULL);
+}
+
+char *TheAgora::getVersion()
+{
+    snprintf(version, 64, "%s %s", __DATE__, __TIME__);
+    return version;
 }
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -255,8 +321,10 @@ void TheAgora::begin()
     begin(AGORA_ANON_NAME);
 }
 
-void TheAgora::begin(const char *newname)
+void TheAgora::begin(const char *newname, const char *caller)
 {
+
+    strncpy(includedBy, caller, 127);
     strncpy(name, newname, AGORA_MAX_NAME_CHARACTERS);
     name[AGORA_MAX_NAME_CHARACTERS] = 0;
     pingInterval = AGORA_DEFAULT_PING_INTERVAL;
@@ -502,6 +570,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             }
             AGORA_LOG_MAC(macAddr);
             AGORA_LOG_V(" Send an invite. ")
+
             if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
             {
                 AGORA_LOG_V("Failed to send to peer");
@@ -569,7 +638,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         AGORA_LOG_FRIEND(theFriend);
         AGORA_LOG_V("\n\n");
 
-        AgoraTribe * theTribe = tribeNamed(theFriend->tribe);
+        AgoraTribe *theTribe = tribeNamed(theFriend->tribe);
         theTribe->meToThem = GURU;
         theTribe->lastMessageReceived = millis();
 
@@ -625,8 +694,11 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         char tribename[AGORA_MAX_NAME_CHARACTERS + 1];
         memcpy(tribename, incomingData + strlen(AGORA_MESSAGE_INVITE.string), AGORA_MAX_NAME_CHARACTERS);
         tribename[AGORA_MAX_NAME_CHARACTERS] = 0;
+        int theChannel = incomingData[len - 2];
+        theChannel = theChannel > 12 ? 1 : theChannel;
+        theChannel = constrain(theChannel, 1, 12);
         AGORA_LOG_MAC(macAddr);
-        AGORA_LOG_V(" from tribe %s ", tribename);
+        AGORA_LOG_V(" from tribe %s , channel %u", tribename, theChannel);
 
         for (int i = 0; i < Agora.tribeCount; i++)
         {
@@ -634,6 +706,11 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
             {
                 Agora.tribes[i].meToThem = IN_CONTACT;
             }
+        }
+
+        if (WiFi.setChannel(theChannel))
+        {
+            AGORA_LOG_E("Faild to change channel to %u", theChannel);
         }
 
         if (!EspNowAddPeer(macAddr))
@@ -688,7 +765,7 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         AGORA_LOG_FRIEND(theFriend);
         AGORA_LOG_V("\n\n");
 
-        AgoraTribe * theTribe = tribeNamed(theFriend->tribe);
+        AgoraTribe *theTribe = tribeNamed(theFriend->tribe);
         theTribe->meToThem = FOLLOWER;
         theTribe->lastMessageReceived = millis();
 
@@ -748,7 +825,14 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
 {
     // AGORA_LOG_INCOMING_DATA(incomingData, len);
     uint16_t washandled = 0;
-    ;
+    if (isMessage(incomingData, len, AGORA_MESSAGE_POLICE))
+    {
+        memcpy(policeMac, macAddr, 6);
+        EspNowAddPeer(policeMac);
+        Agora.showID();
+        return;
+    }
+
     for (int i = 0; i < Agora.tribeCount; i++)
     {
         if (Agora.tribes[i].meToThem == GURU)
@@ -890,6 +974,7 @@ void lookForNewGurus()
         }
     }
 }
+
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------

@@ -85,10 +85,11 @@ public:
     int connectedPercent;
     bool logMessages;
     bool logStatus;
-
+    char version[64];
+    char includedBy[128];
 
     void begin();
-    void begin(const char *newname);
+    void begin(const char *newname, const char * caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
     void tell(const char *text);
     void tell(uint8_t *buf, int len);
@@ -98,11 +99,12 @@ public:
     void join(const char *name);
     void join(String name) { join(name.c_str()); };
     void join(const char *name, agora_cb_t cb);
-
+    char * getVersion();
     bool addFriend(AgoraFriend *newFriend);
 
     void rememberFriends();
     void forgetFriends();
+    void showID();
     /*  void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
      void share(File file)
      {

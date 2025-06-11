@@ -245,6 +245,7 @@ void TheAgora::establish(const char *name, agora_cb_t cb)
     }
     memcpy(&newTribe.name, name, len);
     newTribe.meToThem = GURU;
+    newTribe.channel = WiFi.channel();
     memcpy(&Agora.tribes[Agora.tribeCount], &newTribe, sizeof(AgoraTribe));
     Agora.tribeCount++;
 }
@@ -715,6 +716,10 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         theChannel = constrain(theChannel, 1, 12);
         AGORA_LOG_MAC(macAddr);
         AGORA_LOG_V(" from tribe %s , channel %u", tribename, theChannel);
+
+        AgoraTribe *theTribe = tribeNamed(tribename);
+        if (theTribe)
+            theTribe->channel = theChannel;
 
         for (int i = 0; i < Agora.tribeCount; i++)
         {

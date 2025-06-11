@@ -9,9 +9,6 @@ __BASE_FILE__ üath is no absolute
 */
 
 #include "Agora.h"
-#include "Preferences.h"
-#include <esp_wifi.h>
-#include "SPIFFS.h"
 
 TheAgora Agora;
 Preferences AgoraPreferences;
@@ -27,6 +24,8 @@ AgoraMessage AGORA_MESSAGE_WELCOME = {"I'm your guru: ", 82};
 AgoraMessage AGORA_MESSAGE_PING = {"Huh?", 4};
 AgoraMessage AGORA_MESSAGE_PONG = {"Ha!", 3};
 AgoraMessage AGORA_MESSAGE_POLICE = {"POLICE!Your ID Please!", 25};
+AgoraMessage AGORA_MESSAGE_FTP_DONE = {"GOT the file. Thanks.", 29};
+AgoraMessage AGORA_MESSAGE_FTP_ABORT = {"Fucked up. Over.", 19};
 
 uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -49,6 +48,7 @@ size_t total_bytes_to_receive;
 size_t bytes_to_receive;
 long file_transfer_start;
 FS Fileshare_Filesystem = SPIFFS;
+int file_ack_count;
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            LOGGING
@@ -1190,11 +1190,11 @@ void agoraTask(void *)
 
 //----------------------------------------------------------------------------------------
 
-void send_header()
+void agora_ftp_send_header()
 {
     if (!file_to_share)
     {
-        Serial.println("Cannot open file");
+        Serial.println("No file to share ???");
         return;
     }
 
@@ -1209,6 +1209,7 @@ void send_header()
         bytes_to_send = file_to_share.size();
         percent_done = 0;
         Serial.printf("Send %d bytes\n", bytes_to_send);
+        file_ack_count = 0;
     }
     else
     {
@@ -1219,11 +1220,16 @@ void send_header()
 
 //----------------------------------------------------------------------------------------
 
-void send_chunk()
+void agora_ftp_send_chunk()
 {
     if (!file_to_share)
     {
-        Serial.println("Cannot open file");
+        AGORA_LOG_E("File is gone?");
+        bytes_to_send = 0;
+        for (int i = 0; i < Agora.friendCount; i++)
+        {
+            sendMessage(Agora.friends[i].mac, AGORA_MESSAGE_FTP_ABORT);
+        }
         return;
     }
 
@@ -1251,7 +1257,8 @@ void send_chunk()
             file_to_share.close();
         }
     }
-    else
+
+    if (bytes_to_send == 0)
     {
         Serial.println("\n\nDONE sending the data");
         file_to_share.close();
@@ -1260,12 +1267,30 @@ void send_chunk()
 
 bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
+
+    if (isMessage(incomingData, len, AGORA_MESSAGE_FTP_ABORT))
+    {
+        AGORA_LOG_E("File transfer aborted after %u bytes;", total_bytes_to_receive - bytes_to_receive);
+        bytes_to_receive = 0;
+        if (file_to_write)
+        {
+            file_to_write.close();
+
+            // remove it??
+        }
+        bytes_to_send = 0;
+    }
+
     if (len == 11)
     {
         if (strcmp((const char *)incomingData, "gimmemore!") == 0)
         {
+            file_ack_count++;
+            if (file_ack_count < Agora.friendCount)
+                return true;
             Serial.printf("Let's send the file then. %d bytes to go\n", bytes_to_send);
-            send_chunk();
+            file_ack_count = 0;
+            agora_ftp_send_chunk();
             return true;
         }
     }
@@ -1306,12 +1331,14 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                     Serial.printf("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", esp_fileshare_header.filesize, timetaken / 1000, timetaken % 1000, esp_fileshare_header.filesize * 8000 / timetaken / 1024);
                     memset(&esp_fileshare_header, 0, sizeof(esp_fileshare_header));
                     Serial.println();
+                    sendMessage(macAddr, AGORA_MESSAGE_FTP_DONE);
                     //}
                 }
             }
             else
             {
                 Serial.println("Error writing file");
+                sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
             return true;
         }
@@ -1347,10 +1374,16 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
     return false; // this was not a FTP message
 }
 
-void TheAgora::share(File file)
+void TheAgora::share(const char *path)
 {
     if (!ftp_enabled)
         return;
-    file_to_share = file;
-    send_header();
+
+    file_to_share = SPIFFS.open(path);
+    // file_to_share = SPIFFS.open(path);
+    if (!file_to_share)
+    {
+        AGORA_LOG_E("Cannot open file at %s", path);
+    }
+    agora_ftp_send_header();
 };

@@ -15,6 +15,9 @@
 #include "esp_idf_version.h"
 #include <esp_now.h>
 #include "FS.h"
+#include "SPIFFS.h"
+#include "Preferences.h"
+#include "SD.h"
 
 #define AGORA_DEFAULT_PING_INTERVAL 2000
 #define AGORA_MAX_NAME_CHARACTERS 32
@@ -112,7 +115,7 @@ public:
     void forgetFriends();
     void showID();
     void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
-    void share(File file);
+    void share(const char * path);
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected();

@@ -102,6 +102,7 @@ public:
     bool addFriend(AgoraFriend *newFriend);
 
     void rememberFriends();
+    void forgetFriends();
     /*  void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
      void share(File file)
      {
@@ -154,7 +155,7 @@ bool EspNowAddPeer(const uint8_t *peer_addr);
 
 #define AGORA_LOG_E(msg, ...)                \
     {                                        \
-        Serial.print("AGORA ERROR: ");       \
+        Serial.print("  - AGORA ERROR: ");       \
         Serial.printf((msg), ##__VA_ARGS__); \
         Serial.println();                    \
     }

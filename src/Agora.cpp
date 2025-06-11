@@ -2,7 +2,8 @@
 
 Tribe list does not get real updates
 POLICE MODE
-
+weird channels on follower side
+names don't always come through
 
 */
 
@@ -94,7 +95,22 @@ void AGORA_LOG_FRIEND_TABLE()
         AGORA_LOG_RELATIONSHIP(f.meToThem);
         Serial.print(" | ");
         Serial.printf("%4u | %30s | %30s | ", f.channel, f.name, f.tribe);
-        Serial.printf("%9u | %9u\n", millis() - f.lastMessageReceived, millis() - f.lastMessageSent);
+        if (f.lastMessageReceived)
+        {
+            Serial.printf("%9u |", millis() - f.lastMessageReceived);
+        }
+        else
+        {
+            Serial.printf("        - |");
+        }
+        if (f.lastMessageSent)
+        {
+            Serial.printf("%9u \n", millis() - f.lastMessageSent);
+        }
+        else
+        {
+            Serial.printf("        - \n");
+        }
     }
 }
 
@@ -130,7 +146,7 @@ void AGORA_LOG_STATUS(long interval)
     {
         last_log = millis();
         AGORA_LOG_FRIEND_TABLE();
-        // AGORA_LOG_TRIBE_TABLE();
+        AGORA_LOG_TRIBE_TABLE();
     }
 }
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -296,14 +312,24 @@ bool EspNowAddPeer(uint8_t *peer_addr) */
         }
     }
 }
+//-----------------------------------------------------------------------------------------------------------------------------
 
 bool macMatch(uint8_t *a, uint8_t *b)
 {
+    /*     AGORA_LOG_MAC(a);
+        Serial.print(" == ");
+        AGORA_LOG_MAC(b);
+        Serial.print(" ? ");
+     */
     for (int i = 0; i < 6; i++)
     {
         if (a[i] != b[i])
+        {
+            //         Serial.println("NO");
             return false;
+        }
     }
+    // Serial.println("YES");
     return true;
 }
 
@@ -312,13 +338,34 @@ bool macMatch(AgoraFriend *a, AgoraFriend *b)
     return macMatch(a->mac, b->mac);
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+AgoraTribe *tribeNamed(char *name)
+{
+    for (int i = 0; i < Agora.tribeCount; i++)
+    {
+        if (!strcmp(Agora.tribes[i].name, name))
+        {
+            return &Agora.tribes[i];
+        }
+    }
+    return NULL;
+}
+
+AgoraTribe *tribeNamed(const char *name)
+{
+    return tribeNamed((char *)name);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+
 AgoraFriend *friendForMac(uint8_t *mac)
 {
-    for (int i; i < Agora.friendCount; i++)
+    for (int i = 0; i < Agora.friendCount; i++)
     {
         if (macMatch(Agora.friends[i].mac, mac))
         {
-            return Agora.friends + i * sizeof(AgoraFriend);
+            return &Agora.friends[i]; // + i * sizeof(AgoraFriend);
         }
     }
     return NULL;
@@ -328,6 +375,7 @@ AgoraFriend *friendForMac(const uint8_t *mac)
 {
     return friendForMac((uint8_t *)mac);
 }
+//-----------------------------------------------------------------------------------------------------------------------------
 
 bool TheAgora::addFriend(AgoraFriend *newFriend)
 {
@@ -356,6 +404,22 @@ bool TheAgora::addFriend(AgoraFriend *newFriend)
     EspNowAddPeer(newFriend->mac);
     return true;
 }
+
+void TheAgora::forgetFriends()
+{
+    Agora.friendCount = 0;
+    AgoraPreferences.begin("Agora");
+    AgoraPreferences.putInt("friendCount", Agora.friendCount);
+    AgoraPreferences.end();
+    for (int i = 0; i < Agora.tribeCount; i++)
+    {
+        if (Agora.tribes[i].meToThem != GURU)
+        {
+            Agora.tribes[i].meToThem = ASPIRING_FOLLOWER;
+        }
+    }
+}
+//-----------------------------------------------------------------------------------------------------------------------------
 
 void TheAgora::rememberFriends()
 {
@@ -436,6 +500,8 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             {
                 return 0;
             }
+            AGORA_LOG_MAC(macAddr);
+            AGORA_LOG_V(" Send an invite. ")
             if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
             {
                 AGORA_LOG_V("Failed to send to peer");
@@ -473,6 +539,8 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
 
     else if (isMessage(incomingData, len, AGORA_MESSAGE_PRESENT))
     {
+        AGORA_LOG_V("Presented himself");
+
         char membername[AGORA_MAX_NAME_CHARACTERS + 1];
         memcpy(membername, incomingData + strlen(AGORA_MESSAGE_PRESENT.string), AGORA_MAX_NAME_CHARACTERS);
         membername[AGORA_MAX_NAME_CHARACTERS] = 0;
@@ -489,6 +557,10 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             return 0;
         }
 
+        AGORA_LOG_MAC(theFriend->mac);
+        Serial.printf("\n\n\nPointer Check for new Friend %s", theFriend->name);
+        Serial.printf("%p theFriend, %p Agora\n\n", theFriend, Agora.friends[1]);
+
         strncpy(theFriend->name, membername, AGORA_MAX_NAME_CHARACTERS);
         theFriend->lastMessageReceived = millis();
         theFriend->meToThem = GURU;
@@ -496,8 +568,12 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         AGORA_LOG_V("Welcome to the team: ")
         AGORA_LOG_FRIEND(theFriend);
         AGORA_LOG_V("\n\n");
-        Agora.rememberFriends();
 
+        AgoraTribe * theTribe = tribeNamed(theFriend->tribe);
+        theTribe->meToThem = GURU;
+        theTribe->lastMessageReceived = millis();
+
+        Agora.rememberFriends();
         return 1;
     }
     else if (isMessage(incomingData, len, AGORA_MESSAGE_PONG))
@@ -611,6 +687,11 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         AGORA_LOG_V("My adored GURU: ")
         AGORA_LOG_FRIEND(theFriend);
         AGORA_LOG_V("\n\n");
+
+        AgoraTribe * theTribe = tribeNamed(theFriend->tribe);
+        theTribe->meToThem = FOLLOWER;
+        theTribe->lastMessageReceived = millis();
+
         Agora.rememberFriends();
 
         return 1;
@@ -844,6 +925,8 @@ void agoraTask(void *)
         {
             imASlave++;
         }
+        Agora.friends[i].lastMessageReceived = 0;
+        Agora.friends[i].lastMessageSent = 0;
     }
     AGORA_LOG_V("Recalled %d bytes.");
     AgoraPreferences.end();
@@ -895,6 +978,6 @@ void agoraTask(void *)
         missing_connections += checkMyGurus();
         Agora.connectedPercent = 100 * Agora.friendCount - 100 * missing_connections;
         lookForNewGurus();
-        vTaskDelay(pdMS_TO_TICKS(300));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }

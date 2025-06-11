@@ -33,6 +33,8 @@ void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *inc
 #endif
 void AGORA_LOG_STATUS(long interval = 5000);
 
+extern FS Fileshare_Filesystem;
+
 typedef enum
 {
     UNKNOWN,
@@ -87,12 +89,13 @@ public:
     bool logStatus;
     char version[64];
     char includedBy[128];
+    bool ftp_enabled;
 
     void begin();
     void begin(const char *newname, const char *caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
     void tell(const char *text);
-    void tell(const char *name,const char *text);
+    void tell(const char *name, const char *text);
     void tell(uint8_t *buf, int len);
     void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
@@ -108,14 +111,8 @@ public:
     void rememberFriends();
     void forgetFriends();
     void showID();
-    /*  void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
-     void share(File file)
-     {
-         if (!ftp_enabled)
-             return;
-         file_to_share = file;
-         send_header();
-     }; */
+    void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
+    void share(File file);
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected();
@@ -130,6 +127,7 @@ esp_err_t sendMessage(const uint8_t *macAddr, AgoraMessage message, char *name =
 esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name = (char *)"");
 int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData, int len);
 int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingData, int len);
+bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int len);
 bool isMessage(const uint8_t *input, int len, AgoraMessage message);
 bool macMatch(uint8_t *a, uint8_t *b);
 bool macMatch(AgoraFriend a, AgoraFriend b);
@@ -169,5 +167,14 @@ void AGORA_LOG_MAC(uint8_t *mac);
 void AGORA_LOG_MAC(const uint8_t *mac);
 void AGORA_LOG_RELATIONSHIP(relationship r);
 void AGORA_LOG_FRIEND(AgoraFriend f);
+
+#define ESPNOW_FILESHARE_CHUNK_SIZE 240
+
+typedef struct
+{
+    char magicword[11];
+    int filesize;
+    char filename[48];
+} esp_fileshare_header_t;
 
 #endif

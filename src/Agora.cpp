@@ -37,18 +37,10 @@ const char *r_strings[] = {
     "GURU      ",
     "ABSENT    "};
 
-esp_fileshare_header_t esp_fileshare_header;
-size_t bytes_to_send;
-size_t percent_done;
-esp_now_peer_info_t slave;
-File file_to_share;
-
-File file_to_write;
-size_t total_bytes_to_receive;
-size_t bytes_to_receive;
-long file_transfer_start;
+agoraFileshareHeader_t fileshareHeader;
+agoraFileSender_t fileSender;
+agoraFileReceiver_t fileReceiver;
 FS Fileshare_Filesystem = SPIFFS;
-int file_ack_count;
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            LOGGING
@@ -329,7 +321,7 @@ void TheAgora::tell(const char *name, const char *text)
 
 void TheAgora::tell(uint8_t *buf, int len)
 {
-    if (ftp_enabled && (bytes_to_receive || bytes_to_send))
+    if ((ftp_enabled) && (fileSender.bytesRemaining || fileReceiver.bytesRemaining))
     {
         AGORA_LOG_E("Sharing a File, Please wait until done !!!");
         return;
@@ -348,15 +340,27 @@ void TheAgora::tell(uint8_t *buf, int len)
 
 void TheAgora::tell(const char *name, uint8_t *buf, int len)
 {
-    if (ftp_enabled && (bytes_to_receive || bytes_to_send))
-    {
-        AGORA_LOG_E("Sharing a File, Please wait until done !!!");
-        return;
-    }
     for (int i = 0; i < friendCount; i++)
     {
         if (!strcmp(friends[i].name, name) || !strcmp(friends[i].tribe, name))
         {
+            if (ftp_enabled)
+            {
+                if ((fileSender.bytesRemaining || fileReceiver.bytesRemaining))
+                {
+                    if (macMatch(fileSender.receiverMac, friends[i].mac))
+                    {
+                        AGORA_LOG_E("Sharing a File, Please wait until done !!!");
+                        continue;
+                    }
+                    if (macMatch(fileReceiver.senderMac, friends[i].mac))
+                    {
+                        AGORA_LOG_E("Sharing a File, Please wait until done !!!");
+                        continue;
+                    }
+                }
+            }
+
             if (esp_now_send(friends[i].mac, buf, len) != ESP_OK)
             {
                 AGORA_LOG_E("Error sending message to all members");
@@ -495,6 +499,24 @@ AgoraTribe *tribeNamed(const char *name)
     return tribeNamed((char *)name);
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+AgoraFriend *friendNamed(char *name)
+{
+    for (int i = 0; i < Agora.friendCount; i++)
+    {
+        if (!strcmp(Agora.friends[i].name, name))
+        {
+            return &Agora.friends[i];
+        }
+    }
+    return NULL;
+}
+
+AgoraFriend *friendNamed(const char *name)
+{
+    return friendNamed((char *)name);
+}
 //-----------------------------------------------------------------------------------------------------------------------------
 
 AgoraFriend *friendForMac(uint8_t *mac)
@@ -1192,29 +1214,27 @@ void agoraTask(void *)
 
 void agora_ftp_send_header()
 {
-    if (!file_to_share)
+    if (!fileSender.file)
     {
         Serial.println("No file to share ???");
         return;
     }
 
-    strcpy(esp_fileshare_header.magicword, "lookatthis");
-    strcpy(esp_fileshare_header.filename, file_to_share.name());
-    esp_fileshare_header.filesize = file_to_share.size();
-    esp_err_t result = esp_now_send(NULL, (uint8_t *)&esp_fileshare_header, sizeof(esp_fileshare_header));
-
+    strcpy(fileshareHeader.magicword, "lookatthis");
+    strcpy(fileshareHeader.filename, fileSender.file.name());
+    fileshareHeader.filesize = fileSender.file.size();
+    esp_err_t result = esp_now_send(fileSender.receiverMac, (uint8_t *)&fileshareHeader, sizeof(fileshareHeader));
+    fileSender.startTime = millis();
     if (result == ESP_OK)
     {
         Serial.println("Header sent with success");
-        bytes_to_send = file_to_share.size();
-        percent_done = 0;
-        Serial.printf("Send %d bytes\n", bytes_to_send);
-        file_ack_count = 0;
+        fileSender.bytesRemaining = fileSender.file.size();
+        Serial.printf("Send %d bytes\n", fileSender.bytesRemaining);
     }
     else
     {
         Serial.println("Error sending the data");
-        bytes_to_send = 0;
+        fileSender.bytesRemaining = 0;
     }
 }
 
@@ -1222,145 +1242,157 @@ void agora_ftp_send_header()
 
 void agora_ftp_send_chunk()
 {
-    if (!file_to_share)
+    if (!fileSender.file)
     {
         AGORA_LOG_E("File is gone?");
-        bytes_to_send = 0;
-        for (int i = 0; i < Agora.friendCount; i++)
-        {
-            sendMessage(Agora.friends[i].mac, AGORA_MESSAGE_FTP_ABORT);
-        }
-        return;
+        fileSender.bytesRemaining = 0;
+        /*  for (int i = 0; i < Agora.friendCount; i++)
+         { */
+        sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
+        /*   }
+          return; */
     }
 
-    char buffer[ESPNOW_FILESHARE_CHUNK_SIZE];
-    if (bytes_to_send)
+    if (fileSender.bytesRemaining)
     {
-        int bytes_to_send_now = bytes_to_send > ESPNOW_FILESHARE_CHUNK_SIZE ? ESPNOW_FILESHARE_CHUNK_SIZE : bytes_to_send;
-        file_to_share.readBytes(buffer, bytes_to_send_now);
-        int percent = 100 - bytes_to_send / file_to_share.size();
-        esp_err_t result = esp_now_send(NULL, (uint8_t *)buffer, bytes_to_send_now);
+        char buffer[ESPNOW_FILESHARE_CHUNK_SIZE];
+
+        int bytesToSendNow = fileSender.bytesRemaining > ESPNOW_FILESHARE_CHUNK_SIZE ? ESPNOW_FILESHARE_CHUNK_SIZE : fileSender.bytesRemaining;
+        fileSender.file.readBytes(buffer, bytesToSendNow);
+        esp_err_t result = esp_now_send(fileSender.receiverMac, (uint8_t *)buffer, bytesToSendNow);
 
         if (result == ESP_OK)
         {
-            if (percent != percent_done)
-            {
-                percent_done = percent;
-                Serial.print('.');
-            }
-            bytes_to_send -= bytes_to_send_now;
+            fileSender.bytesRemaining -= bytesToSendNow;
         }
         else
         {
             Serial.println("\n\nError sending the data");
-            bytes_to_send = 0;
-            file_to_share.close();
+            fileSender.bytesRemaining = 0;
+            fileSender.file.close();
+            sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
         }
     }
 
-    if (bytes_to_send == 0)
+    if (fileSender.bytesRemaining == 0)
     {
         Serial.println("\n\nDONE sending the data");
-        file_to_share.close();
+        fileSender.file.close();
     }
 }
+
+void resetFileShareInfo()
+{
+    memset(&fileshareHeader, 0, sizeof(fileshareHeader));
+
+    memset(fileSender.receiverMac, 0, 6);
+    fileSender.bytesRemaining = 0;
+    fileSender.startTime = 0;
+    if (fileSender.file)
+    {
+        fileSender.file.close();
+    }
+
+    fileReceiver.startTime = 0;
+    memset(fileReceiver.senderMac, 0, 6);
+    fileReceiver.bytesRemaining = 0;
+    if (fileReceiver.file)
+    {
+        fileReceiver.file.close();
+    }
+}
+//----------------------------------------------------------------------------------------
 
 bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
 
     if (isMessage(incomingData, len, AGORA_MESSAGE_FTP_ABORT))
     {
-        AGORA_LOG_E("File transfer aborted after %u bytes;", total_bytes_to_receive - bytes_to_receive);
-        bytes_to_receive = 0;
-        if (file_to_write)
-        {
-            file_to_write.close();
-
-            // remove it??
-        }
-        bytes_to_send = 0;
+        AGORA_LOG_E("File transfer aborted;");
+        resetFileShareInfo();
+        return true;
     }
 
     if (len == 11)
     {
         if (strcmp((const char *)incomingData, "gimmemore!") == 0)
         {
-            file_ack_count++;
-            if (file_ack_count < Agora.friendCount)
-                return true;
-            Serial.printf("Let's send the file then. %d bytes to go\n", bytes_to_send);
-            file_ack_count = 0;
+            AGORA_LOG_V("Let's send the file then. %d bytes to go\n", fileSender.bytesRemaining);
             agora_ftp_send_chunk();
             return true;
         }
     }
 
-    if (bytes_to_receive)
+    if (fileReceiver.bytesRemaining)
     {
-        if (len == ESPNOW_FILESHARE_CHUNK_SIZE || len == bytes_to_receive)
+        if (len != ESPNOW_FILESHARE_CHUNK_SIZE && len != fileReceiver.bytesRemaining)
         {
-            if (file_to_write.write(incomingData, len) == len)
+            AGORA_LOG_E("Weird number of bytes received: %d.", len);
+            AGORA_LOG_E("Should be %d or %d\n", fileReceiver.bytesRemaining, ESPNOW_FILESHARE_CHUNK_SIZE);
+            return false;
+        }
+        else
+        {
+
+            // write to the file
+            if (fileReceiver.file.write(incomingData, len) == len)
             {
-                bytes_to_receive -= len;
-                if (bytes_to_receive > 0)
+                fileReceiver.bytesRemaining -= len;
+                if (fileReceiver.bytesRemaining > 0)
                 {
                     const uint8_t mess[] = "gimmemore!";
                     esp_err_t result = esp_now_send(macAddr, mess, sizeof(mess));
                 }
                 else
                 {
-                    if (bytes_to_receive < 0)
+                    if (fileReceiver.bytesRemaining < 0)
                     {
-                        Serial.println("TOO MANY BYTES RECEIVED ????");
+                        AGORA_LOG_E("TOO MANY BYTES RECEIVED ????");
                     }
-                    file_to_write.close();
+                    fileReceiver.file.close();
                     delay(200);
-                    char filepath[100];
-                    sprintf(filepath, "/%s", esp_fileshare_header.filename);
-                    /*                     File file = SD.open(filepath, "r");
-                                        size_t writtensize = file.size();
-                                        file.close();
-                                        if (writtensize != esp_fileshare_header.filesize)
-                                        {
-                                            Serial.printf("\nERROR: Written File size does not match expecttions %d written vs %d\n", writtensize, esp_fileshare_header.filesize);
-                                        }
-                                        else
-                                        {
-                     */
-                    long timetaken = millis() - file_transfer_start;
-                    Serial.printf("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", esp_fileshare_header.filesize, timetaken / 1000, timetaken % 1000, esp_fileshare_header.filesize * 8000 / timetaken / 1024);
-                    memset(&esp_fileshare_header, 0, sizeof(esp_fileshare_header));
-                    Serial.println();
+                    /* char filepath[100];
+                   sprintf(filepath, "/%s", fileshareHeader.filename);
+                                      File file = SD.open(filepath, "r");
+                                       size_t writtensize = file.size();
+                                       file.close();
+                                       if (writtensize != fileshareHeader.filesize)
+                                       {
+                                           Serial.printf("\nERROR: Written File size does not match expecttions %d written vs %d\n", writtensize, fileshareHeader.filesize);
+                                       }
+                                       else
+                                       {
+                    */
+                    long timetaken = millis() - fileReceiver.startTime;
+                    AGORA_LOG_V("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", fileshareHeader.filesize, timetaken / 1000, timetaken % 1000, fileshareHeader.filesize * 8000 / timetaken / 1024);
                     sendMessage(macAddr, AGORA_MESSAGE_FTP_DONE);
                     //}
                 }
             }
             else
             {
-                Serial.println("Error writing file");
+
+                AGORA_LOG_E("Error writing file");
+                resetFileShareInfo();
                 sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
             return true;
         }
-        else
-        {
-            Serial.printf("Weird number of bytes received: %d.", len);
-            Serial.printf("Should be %d or %d\n", bytes_to_receive, ESPNOW_FILESHARE_CHUNK_SIZE);
-        }
     }
-    else if (len == sizeof(esp_fileshare_header_t))
+    else if (len == sizeof(agoraFileshareHeader_t))
     {
-        memcpy(&esp_fileshare_header, incomingData, len);
-        if (strcmp(esp_fileshare_header.magicword, "lookatthis") == 0)
+        memcpy(&fileshareHeader, incomingData, len);
+        if (strcmp(fileshareHeader.magicword, "lookatthis") == 0)
         {
-            Serial.printf("Receive File %s of size %d\n", esp_fileshare_header.filename, esp_fileshare_header.filesize);
-            file_transfer_start = millis();
-            bytes_to_receive = esp_fileshare_header.filesize;
+            Serial.printf("Receive File %s of size %d\n", fileshareHeader.filename, fileshareHeader.filesize);
+            fileReceiver.startTime = millis();
+            fileReceiver.bytesRemaining = fileshareHeader.filesize;
+            memcpy(fileReceiver.senderMac,macAddr,6);
 
             char filepath[100];
-            sprintf(filepath, "/%s", esp_fileshare_header.filename);
-            file_to_write = Fileshare_Filesystem.open(filepath, "w");
-            if (!file_to_write)
+            sprintf(filepath, "/%s", fileshareHeader.filename);
+            fileReceiver.file = Fileshare_Filesystem.open(filepath, "w");
+            if (!fileReceiver.file)
             {
                 Serial.printf("Error opening file for writing %s\n", filepath);
                 return true;
@@ -1374,16 +1406,39 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
     return false; // this was not a FTP message
 }
 
+void TheAgora::share(const char *name, const char *path)
+{
+    if (!ftp_enabled)
+        return;
+
+    AgoraFriend *f = friendNamed(name);
+    if (!f)
+    {
+        AGORA_LOG_E("I don't have a friend called %s", name);
+        return;
+    }
+    memcpy(fileSender.receiverMac, f->mac, 6);
+    fileSender.file = Fileshare_Filesystem.open(path);
+    if (!fileSender.file)
+    {
+        AGORA_LOG_E("Cannot open file at %s", path);
+    }
+    agora_ftp_send_header();
+}
+
 void TheAgora::share(const char *path)
 {
     if (!ftp_enabled)
         return;
 
-    file_to_share = SPIFFS.open(path);
-    // file_to_share = SPIFFS.open(path);
-    if (!file_to_share)
+    AGORA_LOG_E("Not well implemented. Aborting");
+    return;
+
+ /*    file = Fileshare_Filesystem.open(path);
+    // file = SPIFFS.open(path);
+    if (!file)
     {
         AGORA_LOG_E("Cannot open file at %s", path);
     }
-    agora_ftp_send_header();
+    agora_ftp_send_header(); */
 };

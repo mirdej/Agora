@@ -38,6 +38,33 @@ void AGORA_LOG_STATUS(long interval = 5000);
 
 extern FS Fileshare_Filesystem;
 
+#define ESPNOW_FILESHARE_CHUNK_SIZE 240
+
+typedef struct
+{
+    char magicword[11];
+    int filesize;
+    char filename[48];
+} agoraFileshareHeader_t;
+
+typedef struct
+{
+    uint8_t receiverMac[6];
+    size_t bytesRemaining;
+    long startTime;
+    File file;
+    //FS Filesystem;
+} agoraFileSender_t;
+
+typedef struct
+{
+    uint8_t senderMac[6];
+    File file;
+    long startTime;
+    size_t bytesRemaining;
+    // FS Filesystem;
+} agoraFileReceiver_t;
+
 typedef enum
 {
     UNKNOWN,
@@ -115,7 +142,8 @@ public:
     void forgetFriends();
     void showID();
     void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
-    void share(const char * path);
+    void share(const char *path);
+    void share(const char *name, const char *path);
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected();
@@ -170,14 +198,5 @@ void AGORA_LOG_MAC(uint8_t *mac);
 void AGORA_LOG_MAC(const uint8_t *mac);
 void AGORA_LOG_RELATIONSHIP(relationship r);
 void AGORA_LOG_FRIEND(AgoraFriend f);
-
-#define ESPNOW_FILESHARE_CHUNK_SIZE 240
-
-typedef struct
-{
-    char magicword[11];
-    int filesize;
-    char filename[48];
-} esp_fileshare_header_t;
 
 #endif

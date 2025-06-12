@@ -39,6 +39,7 @@ void AGORA_LOG_STATUS(long interval = 5000);
 extern FS Fileshare_Filesystem;
 
 #define ESPNOW_FILESHARE_CHUNK_SIZE 240
+#define ESPNOW_FILESHARE_TIMEOUT 500
 
 typedef struct
 {
@@ -52,8 +53,9 @@ typedef struct
     uint8_t receiverMac[6];
     size_t bytesRemaining;
     long startTime;
+    long lastMessage;
     File file;
-    //FS Filesystem;
+    // FS Filesystem;
 } agoraFileSender_t;
 
 typedef struct
@@ -62,6 +64,7 @@ typedef struct
     File file;
     long startTime;
     size_t bytesRemaining;
+    long lastMessage;
     // FS Filesystem;
 } agoraFileReceiver_t;
 

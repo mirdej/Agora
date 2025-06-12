@@ -1118,6 +1118,22 @@ void lookForNewGurus()
     }
 }
 
+void checkFTPTimeout()
+{
+    if (!Agora.ftp_enabled)
+        return;
+    if (fileSender.bytesRemaining && millis() - fileSender.lastMessage > ESPNOW_FILESHARE_TIMEOUT)
+    {
+        sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
+        resetFileShareInfo();
+    }
+
+    if (fileReceiver.bytesRemaining && millis() - fileReceiver.lastMessage > ESPNOW_FILESHARE_TIMEOUT)
+    {
+        sendMessage(fileReceiver.senderMac, AGORA_MESSAGE_FTP_ABORT);
+        resetFileShareInfo();
+    }
+}
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -1204,6 +1220,7 @@ void agoraTask(void *)
         int missing_connections = 0;
         missing_connections += checkMyFollowers();
         missing_connections += checkMyGurus();
+        checkFTPTimeout();
         Agora.connectedPercent = 100 * Agora.friendCount - 100 * missing_connections;
         lookForNewGurus();
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -1288,12 +1305,14 @@ void resetFileShareInfo()
     memset(fileSender.receiverMac, 0, 6);
     fileSender.bytesRemaining = 0;
     fileSender.startTime = 0;
+    fileSender.lastMessage = 0;
     if (fileSender.file)
     {
         fileSender.file.close();
     }
 
     fileReceiver.startTime = 0;
+    fileReceiver.lastMessage = 0;
     memset(fileReceiver.senderMac, 0, 6);
     fileReceiver.bytesRemaining = 0;
     if (fileReceiver.file)
@@ -1318,6 +1337,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
         if (strcmp((const char *)incomingData, "gimmemore!") == 0)
         {
             AGORA_LOG_V("Let's send the file then. %d bytes to go\n", fileSender.bytesRemaining);
+            fileSender.lastMessage = millis();
             agora_ftp_send_chunk();
             return true;
         }
@@ -1335,6 +1355,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
         {
 
             // write to the file
+            fileReceiver.lastMessage = millis();
             if (fileReceiver.file.write(incomingData, len) == len)
             {
                 fileReceiver.bytesRemaining -= len;
@@ -1387,7 +1408,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
             Serial.printf("Receive File %s of size %d\n", fileshareHeader.filename, fileshareHeader.filesize);
             fileReceiver.startTime = millis();
             fileReceiver.bytesRemaining = fileshareHeader.filesize;
-            memcpy(fileReceiver.senderMac,macAddr,6);
+            memcpy(fileReceiver.senderMac, macAddr, 6);
 
             char filepath[100];
             sprintf(filepath, "/%s", fileshareHeader.filename);
@@ -1434,11 +1455,11 @@ void TheAgora::share(const char *path)
     AGORA_LOG_E("Not well implemented. Aborting");
     return;
 
- /*    file = Fileshare_Filesystem.open(path);
-    // file = SPIFFS.open(path);
-    if (!file)
-    {
-        AGORA_LOG_E("Cannot open file at %s", path);
-    }
-    agora_ftp_send_header(); */
+    /*    file = Fileshare_Filesystem.open(path);
+       // file = SPIFFS.open(path);
+       if (!file)
+       {
+           AGORA_LOG_E("Cannot open file at %s", path);
+       }
+       agora_ftp_send_header(); */
 };

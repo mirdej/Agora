@@ -94,7 +94,7 @@ void AGORA_LOG_FRIEND_TABLE()
         Serial.print(" | ");
         AGORA_LOG_RELATIONSHIP(f.meToThem);
         Serial.print(" | ");
-        Serial.printf("%4u | %30s | %30s | ", f.channel, f.name, f.tribe);
+        Serial.printf("%4u | %-30s | %-30s | ", f.channel, f.name, f.tribe);
         if (f.lastMessageReceived)
         {
             Serial.printf("%9u |", millis() - f.lastMessageReceived);
@@ -124,7 +124,7 @@ void AGORA_LOG_TRIBE_TABLE()
         AgoraTribe t = Agora.tribes[i];
         AGORA_LOG_RELATIONSHIP(t.meToThem);
         Serial.print(" | ");
-        Serial.printf("%4u | %30s | ", t.channel, t.name);
+        Serial.printf("%4u | %-30s | ", t.channel, t.name);
         Serial.printf("%9u | %9u\n", millis() - t.lastMessageReceived, millis() - t.lastMessageSent);
     }
     Serial.println("-----------------------------------------------------------------------------------");
@@ -147,6 +147,9 @@ void AGORA_LOG_STATUS(long interval)
     {
         last_log = millis();
         Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
+        Serial.printf("THE AGORA | Status for %s | Number of active connections %u\n", Agora.name, Agora.connected());
+        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
+        Serial.println();
         AGORA_LOG_TRIBE_TABLE();
         Serial.println();
         AGORA_LOG_FRIEND_TABLE();
@@ -1286,13 +1289,13 @@ void agora_ftp_send_chunk()
             sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
         }
     }
+    Agora.ftpCallback(fileSender.receiverMac, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
 
     if (fileSender.bytesRemaining == 0)
     {
         Serial.println("\n\nDONE sending the data");
         fileSender.file.close();
     }
-    Agora.ftpCallback(fileSender.receiverMac, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
 }
 
 void resetFileShareInfo()

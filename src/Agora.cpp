@@ -1,11 +1,10 @@
 /*TODOS
 
 Tribe list does not get real updates (wifi channels ??)
-weird channels on follower side
---> send channel with invite!!
 __BASE_FILE__ üath is no absolute
 
-
+Auto pairing crashes ESP if wifi is already enabled. Once the triend info is stored in preferences everything works as expected.
+ALSO E (45996) ESPNOW: Peer channel is not equal to the home channel, send fail!
 */
 
 #include "Agora.h"
@@ -41,6 +40,7 @@ agoraFileshareHeader_t fileshareHeader;
 agoraFileSender_t fileSender;
 agoraFileReceiver_t fileReceiver;
 FS Fileshare_Filesystem = SPIFFS;
+TaskHandle_t AgoraTaskHandle;
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            LOGGING
@@ -370,11 +370,6 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
     }
 }
 
-//-----------------------------------------------------------------------------------------------------------------------------
-int TheAgora::connected()
-{
-    return connectedPercent > 99;
-}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void TheAgora::setPingInterval(long ms)
@@ -409,9 +404,18 @@ void TheAgora::begin(const char *newname, const char *caller)
         8192,         // Stack size in words, not bytes.
         NULL,         // Parameter passed into the task.
         1,            // Priority at which the task is created.
-        NULL);
+        &AgoraTaskHandle);
 }
 
+void TheAgora::end()
+{
+    esp_now_deinit();
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        WiFi.mode(WIFI_OFF);
+    }
+    vTaskDelete(AgoraTaskHandle);
+}
 //----------------------------------------------------------------------------------------
 
 bool EspNowAddPeer(const uint8_t *peer_addr)
@@ -829,7 +833,7 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
             }
         }
 
-        if (WiFi.setChannel(theChannel))
+        if (esp_wifi_set_channel(theChannel, WIFI_SECOND_CHAN_NONE) != ESP_OK)
         {
             AGORA_LOG_E("Faild to change channel to %u", theChannel);
         }
@@ -1096,7 +1100,7 @@ void lookForNewGurus()
                 }
             }
 
-            if (connect_fail_count > 5)
+            if (!WiFi.isConnected() && connect_fail_count > 5)
             {
                 Agora.tribes[i].channel = (Agora.tribes[i].channel < ESP_NOW_MAX_CHANNEL) ? Agora.tribes[i].channel + 1 : 1;
                 AGORA_LOG_V("\n\nConnection failed %d times. Trying next channel: %d\n", connect_fail_count, Agora.tribes[i].channel);
@@ -1151,7 +1155,7 @@ void agoraTask(void *)
 
     Agora.wifiChannel = constrain(Agora.wifiChannel, 1, ESP_NOW_MAX_CHANNEL);
 
-    AGORA_LOG_V("Recalling %d friends.");
+    AGORA_LOG_V("Recalling %u friends.", Agora.friendCount);
     int storageBytes = 0;
     int imAMaster, imASlave;
     for (int i = 0; i < Agora.friendCount; i++)
@@ -1217,11 +1221,20 @@ void agoraTask(void *)
 
     while (1)
     {
-        int missing_connections = 0;
-        missing_connections += checkMyFollowers();
-        missing_connections += checkMyGurus();
+        int connectionCount = 0;
+        connectionCount += checkMyFollowers();
+        connectionCount += checkMyGurus();
+        Agora.activeConnectionCount = connectionCount;
+
+        if (Agora.timeout != 0 && connectionCount == 0)
+        {
+            if (millis() > Agora.timeout)
+            {
+                AGORA_LOG_E("\nNo active connections after %u seconds of trying.\nQuit the Agora\n\n", millis() / 1000);
+                Agora.end();
+            }
+        }
         checkFTPTimeout();
-        Agora.connectedPercent = 100 * Agora.friendCount - 100 * missing_connections;
         lookForNewGurus();
         vTaskDelay(pdMS_TO_TICKS(200));
     }

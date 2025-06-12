@@ -116,6 +116,7 @@ public:
     AgoraTribe tribes[AGORA_MAX_TRIBES];
     int friendCount;
     int tribeCount;
+    int activeConnectionCount;
     int wifiChannel;
     int connectedPercent;
     bool logMessages;
@@ -127,6 +128,7 @@ public:
     void begin();
     void begin(const char *newname, const char *caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
+    void end();
     void tell(const char *text);
     void tell(const char *name, const char *text);
     void tell(uint8_t *buf, int len);
@@ -144,12 +146,16 @@ public:
     void rememberFriends();
     void forgetFriends();
     void showID();
-    void useFileSystem(fs::FS &fs) { Fileshare_Filesystem = fs; }
+    void enableFileSharing(fs::FS &fs = SPIFFS)
+    {
+        ftp_enabled = true;
+        Fileshare_Filesystem = fs;
+    }
     void share(const char *path);
     void share(const char *name, const char *path);
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
-    int connected();
+    int connected() { return activeConnectionCount; }
 
 private:
 };
@@ -165,6 +171,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
 bool isMessage(const uint8_t *input, int len, AgoraMessage message);
 bool macMatch(uint8_t *a, uint8_t *b);
 bool macMatch(AgoraFriend a, AgoraFriend b);
+void resetFileShareInfo();
 
 // bool EspNowAddPeer(uint8_t *peer_addr);
 bool EspNowAddPeer(const uint8_t *peer_addr);

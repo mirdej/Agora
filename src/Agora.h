@@ -28,7 +28,10 @@
 
 void agoraTask(void *);
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
+typedef void (*agora_share_cb_t)(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining);
+
 void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+void dummySharinCallback(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining);
 #if ESP_IDF_VERSION_MAJOR < 5
 void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
 #else
@@ -110,7 +113,6 @@ struct TheAgora
 public:
     long timeout;
     long pingInterval;
-    bool filesharingEnabled;
     char name[AGORA_MAX_NAME_CHARACTERS + 1];
     AgoraFriend friends[AGORA_MAX_FRIENDS];
     AgoraTribe tribes[AGORA_MAX_TRIBES];
@@ -123,7 +125,8 @@ public:
     bool logStatus;
     char version[64];
     char includedBy[128];
-    bool ftp_enabled;
+    bool ftpEnabled;
+    agora_share_cb_t ftpCallback;
 
     void begin();
     void begin(const char *newname, const char *caller = __BASE_FILE__);
@@ -146,9 +149,10 @@ public:
     void rememberFriends();
     void forgetFriends();
     void showID();
-    void enableFileSharing(fs::FS &fs = SPIFFS)
+    void enableFileSharing(fs::FS &fs = SPIFFS, agora_share_cb_t cb = dummySharinCallback)
     {
-        ftp_enabled = true;
+        ftpCallback = cb;
+        ftpEnabled = true;
         Fileshare_Filesystem = fs;
     }
     void share(const char *path);

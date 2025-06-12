@@ -15,6 +15,7 @@ Preferences AgoraPreferences;
 esp_now_peer_info_t tempPeer;
 
 void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len) { ; }
+void dummySharinCallback(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining) { ; }
 
 AgoraMessage AGORA_MESSAGE_LOST = {"HALLLOOO??", 61};
 AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 52};
@@ -321,7 +322,7 @@ void TheAgora::tell(const char *name, const char *text)
 
 void TheAgora::tell(uint8_t *buf, int len)
 {
-    if ((ftp_enabled) && (fileSender.bytesRemaining || fileReceiver.bytesRemaining))
+    if ((ftpEnabled) && (fileSender.bytesRemaining || fileReceiver.bytesRemaining))
     {
         AGORA_LOG_E("Sharing a File, Please wait until done !!!");
         return;
@@ -344,7 +345,7 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
     {
         if (!strcmp(friends[i].name, name) || !strcmp(friends[i].tribe, name))
         {
-            if (ftp_enabled)
+            if (ftpEnabled)
             {
                 if ((fileSender.bytesRemaining || fileReceiver.bytesRemaining))
                 {
@@ -369,7 +370,6 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
         }
     }
 }
-
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void TheAgora::setPingInterval(long ms)
@@ -956,7 +956,7 @@ bool isMessage(const uint8_t *input, int len, AgoraMessage message)
 
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
-    if (Agora.ftp_enabled)
+    if (Agora.ftpEnabled)
     {
         if (handle_agora_ftp(macAddr, incomingData, len))
         {
@@ -1035,46 +1035,6 @@ esp_err_t sendMessage(AgoraFriend *to, AgoraMessage message, char *name)
     //  to->lastMessageSent = millis();
     return sendMessage(to->mac, message, name);
 }
-//-----------------------------------------------------------------------------------------------------------------------------
-// sends ping to followers regularly -  returns  number of Followers that don't reply in a timely manner
-int checkMyFollowers()
-{
-    int missingFollowers = 0;
-    for (int i = 0; i < Agora.friendCount; i++)
-    {
-        if (Agora.friends[i].meToThem == GURU)
-        {
-            if (millis() - Agora.friends[i].lastMessageSent > Agora.pingInterval)
-            {
-                sendMessage(&Agora.friends[i], AGORA_MESSAGE_PING);
-            }
-
-            if (millis() - Agora.friends[i].lastMessageReceived > 2 * Agora.pingInterval)
-            {
-                missingFollowers++;
-            }
-        }
-    }
-    return missingFollowers;
-}
-//-----------------------------------------------------------------------------------------------------------------------------
-// returns  number of GURUS that we haven't heard of in a while
-
-int checkMyGurus()
-{
-    int missingGurus = 0;
-    for (int i = 0; i < Agora.friendCount; i++)
-    {
-        if (Agora.friends[i].meToThem == FOLLOWER)
-        {
-            if (millis() - Agora.friends[i].lastMessageReceived > 2 * Agora.pingInterval)
-            {
-                missingGurus++;
-            }
-        }
-    }
-    return missingGurus;
-}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // autoPair
@@ -1124,7 +1084,7 @@ void lookForNewGurus()
 
 void checkFTPTimeout()
 {
-    if (!Agora.ftp_enabled)
+    if (!Agora.ftpEnabled)
         return;
     if (fileSender.bytesRemaining && millis() - fileSender.lastMessage > ESPNOW_FILESHARE_TIMEOUT)
     {
@@ -1221,14 +1181,37 @@ void agoraTask(void *)
 
     while (1)
     {
-        int connectionCount = 0;
-        connectionCount += checkMyFollowers();
-        connectionCount += checkMyGurus();
-        Agora.activeConnectionCount = connectionCount;
-
-        if (Agora.timeout != 0 && connectionCount == 0)
+        int count = 0;
+        long lastMessage = 0;
+        for (int i = 0; i < Agora.friendCount; i++)
         {
-            if (millis() > Agora.timeout)
+            AgoraFriend f = Agora.friends[i];
+            lastMessage = lastMessage < f.lastMessageReceived ? f.lastMessageReceived : lastMessage;
+
+            if (f.meToThem == GURU)
+            {
+                if (millis() - f.lastMessageSent > Agora.pingInterval)
+                {
+                    sendMessage(&f, AGORA_MESSAGE_PING);
+                }
+                if (millis() - f.lastMessageReceived < 2 * Agora.pingInterval)
+                {
+                    count++;
+                }
+            }
+            else if (f.meToThem == FOLLOWER)
+            {
+                if (millis() - f.lastMessageReceived < 2 * Agora.pingInterval)
+                {
+                    count++;
+                }
+            }
+        }
+        Agora.activeConnectionCount = count;
+
+        if (Agora.timeout)
+        {
+            if (millis() - lastMessage > Agora.timeout)
             {
                 AGORA_LOG_E("\nNo active connections after %u seconds of trying.\nQuit the Agora\n\n", millis() / 1000);
                 Agora.end();
@@ -1309,6 +1292,7 @@ void agora_ftp_send_chunk()
         Serial.println("\n\nDONE sending the data");
         fileSender.file.close();
     }
+    Agora.ftpCallback(fileSender.receiverMac, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
 }
 
 void resetFileShareInfo()
@@ -1349,7 +1333,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
     {
         if (strcmp((const char *)incomingData, "gimmemore!") == 0)
         {
-            AGORA_LOG_V("Let's send the file then. %d bytes to go\n", fileSender.bytesRemaining);
+            // AGORA_LOG_V("Let's send the file then. %d bytes to go\n", fileSender.bytesRemaining);
             fileSender.lastMessage = millis();
             agora_ftp_send_chunk();
             return true;
@@ -1410,6 +1394,8 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                 resetFileShareInfo();
                 sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
+            Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
+
             return true;
         }
     }
@@ -1442,7 +1428,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
 
 void TheAgora::share(const char *name, const char *path)
 {
-    if (!ftp_enabled)
+    if (!ftpEnabled)
         return;
 
     AgoraFriend *f = friendNamed(name);
@@ -1462,7 +1448,7 @@ void TheAgora::share(const char *name, const char *path)
 
 void TheAgora::share(const char *path)
 {
-    if (!ftp_enabled)
+    if (!ftpEnabled)
         return;
 
     AGORA_LOG_E("Not well implemented. Aborting");

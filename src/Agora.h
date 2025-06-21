@@ -57,6 +57,7 @@ typedef struct
     size_t bytesRemaining;
     long startTime;
     long lastMessage;
+    int nextReceiver;
     File file;
     // FS Filesystem;
 } agoraFileSender_t;

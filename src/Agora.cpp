@@ -147,7 +147,20 @@ void AGORA_LOG_STATUS(long interval)
     {
         last_log = millis();
         Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
-        Serial.printf("THE AGORA | Status for %s | Number of active connections %u\n", Agora.name, Agora.connected());
+        Serial.printf("THE AGORA | Status for %s | ", Agora.name);
+        uint8_t baseMac[6];
+        esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
+        if (ret == ESP_OK)
+        {
+            Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x",
+                          baseMac[0], baseMac[1], baseMac[2],
+                          baseMac[3], baseMac[4], baseMac[5]);
+        }
+        else
+        {
+            Serial.print("Failed to read MAC address");
+        }
+        Serial.printf(" | Number of active connections %u\n", Agora.connected());
         Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
         Serial.println();
         AGORA_LOG_TRIBE_TABLE();
@@ -1226,6 +1239,32 @@ void agoraTask(void *)
     }
 }
 
+
+//----------------------------------------------------------------------------------------
+
+void resetFileShareInfo()
+{
+    memset(&fileshareHeader, 0, sizeof(fileshareHeader));
+
+    memset(fileSender.receiverMac, 0, 6);
+    fileSender.bytesRemaining = 0;
+    fileSender.startTime = 0;
+    fileSender.lastMessage = 0;
+    if (fileSender.file)
+    {
+        fileSender.file.close();
+    }
+
+    fileReceiver.startTime = 0;
+    fileReceiver.lastMessage = 0;
+    memset(fileReceiver.senderMac, 0, 6);
+    fileReceiver.bytesRemaining = 0;
+    if (fileReceiver.file)
+    {
+        fileReceiver.file.close();
+    }
+}
+
 //----------------------------------------------------------------------------------------
 
 void agora_ftp_send_header()
@@ -1294,32 +1333,21 @@ void agora_ftp_send_chunk()
     if (fileSender.bytesRemaining == 0)
     {
         Serial.println("\n\nDONE sending the data");
-        fileSender.file.close();
+        if (fileSender.nextReceiver)
+        {
+
+            AGORA_LOG_V("Sending file to next friend");
+            memcpy(fileSender.receiverMac, Agora.friends[fileSender.nextReceiver].mac, 6);
+            fileSender.nextReceiver = Agora.friendCount > fileSender.nextReceiver + 1 ? fileSender.nextReceiver + 1 : 0;
+            agora_ftp_send_header();
+        }
+        else
+        {
+            resetFileShareInfo();
+        }
     }
 }
 
-void resetFileShareInfo()
-{
-    memset(&fileshareHeader, 0, sizeof(fileshareHeader));
-
-    memset(fileSender.receiverMac, 0, 6);
-    fileSender.bytesRemaining = 0;
-    fileSender.startTime = 0;
-    fileSender.lastMessage = 0;
-    if (fileSender.file)
-    {
-        fileSender.file.close();
-    }
-
-    fileReceiver.startTime = 0;
-    fileReceiver.lastMessage = 0;
-    memset(fileReceiver.senderMac, 0, 6);
-    fileReceiver.bytesRemaining = 0;
-    if (fileReceiver.file)
-    {
-        fileReceiver.file.close();
-    }
-}
 //----------------------------------------------------------------------------------------
 
 bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int len)
@@ -1442,9 +1470,11 @@ void TheAgora::share(const char *name, const char *path)
     }
     memcpy(fileSender.receiverMac, f->mac, 6);
     fileSender.file = Fileshare_Filesystem.open(path);
+    fileSender.nextReceiver = 0;
     if (!fileSender.file)
     {
         AGORA_LOG_E("Cannot open file at %s", path);
+        return;
     }
     agora_ftp_send_header();
 }
@@ -1454,14 +1484,18 @@ void TheAgora::share(const char *path)
     if (!ftpEnabled)
         return;
 
-    AGORA_LOG_E("Not well implemented. Aborting");
-    return;
-
-    /*    file = Fileshare_Filesystem.open(path);
-       // file = SPIFFS.open(path);
-       if (!file)
-       {
-           AGORA_LOG_E("Cannot open file at %s", path);
-       }
-       agora_ftp_send_header(); */
-};
+    if (!Agora.friendCount)
+    {
+        AGORA_LOG_E("I don't have any friends to whom I could send this file");
+        return;
+    }
+    memcpy(fileSender.receiverMac, Agora.friends[0].mac, 6);
+    fileSender.file = Fileshare_Filesystem.open(path);
+    fileSender.nextReceiver = Agora.friendCount > 1 ? 1 : 0;
+    if (!fileSender.file)
+    {
+        AGORA_LOG_E("Cannot open file at %s", path);
+        return;
+    }
+    agora_ftp_send_header();
+}

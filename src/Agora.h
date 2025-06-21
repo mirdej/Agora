@@ -26,6 +26,9 @@
 #define AGORA_ANON_NAME "Anon"
 #define ESP_NOW_MAX_CHANNEL 13
 
+#define AGORA_WIFI_PROV_SSID_OFFSET 20
+#define AGORA_WIFI_PROV_PASS_OFFSET 62
+
 void agoraTask(void *);
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
 typedef void (*agora_share_cb_t)(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining);
@@ -161,6 +164,8 @@ public:
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected() { return activeConnectionCount; }
+
+    void openTheGate(const char * ssid,const char * pass);
 
 private:
 };

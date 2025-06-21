@@ -26,6 +26,7 @@ AgoraMessage AGORA_MESSAGE_PONG = {"Ha!", 3};
 AgoraMessage AGORA_MESSAGE_POLICE = {"POLICE!Your ID Please!", 25};
 AgoraMessage AGORA_MESSAGE_FTP_DONE = {"GOT the file. Thanks.", 29};
 AgoraMessage AGORA_MESSAGE_FTP_ABORT = {"Fucked up. Over.", 19};
+AgoraMessage AGORA_MESSAGE_WIFI_PROV = {"Here's da kod:", 122};
 
 uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -618,6 +619,17 @@ void TheAgora::rememberFriends()
     AgoraPreferences.end();
     AGORA_LOG_V("Stored %d bytes (plus some).");
 }
+//-----------------------------------------------------------------------------------------------------------------------------
+
+void TheAgora::openTheGate(const char *ssid, const char *pass)
+{
+    AgoraMessage message = AGORA_MESSAGE_WIFI_PROV;
+    char buf[message.size];
+    memset(buf, 0, message.size);
+    memcpy(buf + AGORA_WIFI_PROV_SSID_OFFSET, ssid, AGORA_MAX_NAME_CHARACTERS);
+    memcpy(buf + AGORA_WIFI_PROV_PASS_OFFSET, pass, AGORA_MAX_NAME_CHARACTERS);
+    esp_now_send(NULL, (uint8_t *)buf, message.size);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -996,6 +1008,49 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
         return;
     }
 
+    if (isMessage(incomingData, len, AGORA_MESSAGE_WIFI_PROV))
+    {
+        if (WiFi.isConnected())
+        {
+            AGORA_LOG_V("Wifi already connected");
+            return;
+        }
+
+        char ssid[AGORA_MAX_NAME_CHARACTERS + 1];
+        char pass[AGORA_MAX_NAME_CHARACTERS + 1];
+        memset(ssid, 0, AGORA_MAX_NAME_CHARACTERS + 1);
+        memset(pass, 0, AGORA_MAX_NAME_CHARACTERS + 1);
+        memcpy(ssid, incomingData + AGORA_WIFI_PROV_SSID_OFFSET, AGORA_MAX_NAME_CHARACTERS);
+        memcpy(pass, incomingData + AGORA_WIFI_PROV_PASS_OFFSET, AGORA_MAX_NAME_CHARACTERS);
+
+        AGORA_LOG_V("Trying to conect to Wifi %s using password %s", ssid, pass);
+
+        WiFi.setHostname(Agora.name);
+        WiFi.begin(ssid, pass);
+
+        long startTime = millis();
+        while (WiFi.status() != WL_CONNECTED)
+        {
+            delay(10);
+            if (millis() - startTime > 4000)
+            {
+                break;
+            }
+        }
+
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            AGORA_LOG_V("Failed to connect. Timout");
+        }
+        else
+        {
+            AGORA_LOG_V("Connected.")
+            AGORA_LOG_V("IP address: %s", WiFi.localIP().toString().c_str());
+            AGORA_LOG_V("Wifi Hostname: %s", WiFi.getHostname());
+        }
+        return;
+    }
+
     for (int i = 0; i < Agora.tribeCount; i++)
     {
         if (Agora.tribes[i].meToThem == GURU)
@@ -1038,7 +1093,7 @@ esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name)
     sprintf(buf, "%s%s\0", message.string, name);
     if (Agora.logMessages)
     {
-        ("Sending Message: %s", buf);
+        AGORA_LOG_V("Sending Message: %s", buf);
     }
     AgoraFriend *f = friendForMac(macAddr);
     if (f)
@@ -1238,7 +1293,6 @@ void agoraTask(void *)
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
-
 
 //----------------------------------------------------------------------------------------
 

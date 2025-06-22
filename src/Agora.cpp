@@ -16,7 +16,7 @@ Preferences AgoraPreferences;
 esp_now_peer_info_t tempPeer;
 
 void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len) { ; }
-void dummySharinCallback(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining) { ; }
+void dummySharinCallback(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining) { ; }
 
 AgoraMessage AGORA_MESSAGE_LOST = {"HALLLOOO??", 61};
 AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 52};
@@ -1444,7 +1444,14 @@ void agora_ftp_send_chunk()
             sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
         }
     }
-    Agora.ftpCallback(fileSender.receiverMac, fileSender.ftpStatus, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
+    if (fileSender.file)
+    {
+        Agora.ftpCallback(fileSender.receiverMac, fileSender.ftpStatus, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
+    }
+    else
+    {
+        Agora.ftpCallback(fileSender.receiverMac, fileSender.ftpStatus, "No file", 0, fileSender.bytesRemaining);
+    }
 
     if (fileSender.bytesRemaining == 0)
     {
@@ -1493,7 +1500,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
         {
             AGORA_LOG_E("Weird number of bytes received: %d.", len);
             AGORA_LOG_E("Should be %d or %d\n", fileReceiver.bytesRemaining, ESPNOW_FILESHARE_CHUNK_SIZE);
-            fileReceiver.ftpStatus = ERROR;      
+            fileReceiver.ftpStatus = ERROR;
             return false;
         }
         else
@@ -1545,7 +1552,16 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                 resetFileShareInfo();
                 sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
-            Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
+
+            if (fileReceiver.file)
+            {
+
+                Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
+            }
+            else
+            {
+                Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, "No file", 0, fileReceiver.bytesRemaining);
+            }
 
             return true;
         }

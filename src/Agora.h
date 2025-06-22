@@ -126,7 +126,7 @@ public:
     int activeConnectionCount;
     int wifiChannel;
     int connectedPercent;
-    bool logMessages;
+    bool eavesdrop;
     bool logStatus;
     char version[64];
     char includedBy[128];

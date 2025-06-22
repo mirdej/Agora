@@ -8,6 +8,7 @@ ALSO E (45996) ESPNOW: Peer channel is not equal to the home channel, send fail!
 */
 
 #include "Agora.h"
+#include "esp_mac.h"
 
 TheAgora Agora;
 Preferences AgoraPreferences;
@@ -144,31 +145,44 @@ void AGORA_LOG_STATUS(long interval)
     if (!Agora.logStatus)
         return;
     static long last_log;
-    if (millis() - last_log > interval)
+    static int lastConnections;
+    bool doLog = false;
+
+    if (Agora.activeConnectionCount != lastConnections)
     {
-        last_log = millis();
-        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
-        Serial.printf("THE AGORA | Status for %s | ", Agora.name);
-        uint8_t baseMac[6];
-        esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
-        if (ret == ESP_OK)
-        {
-            Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x",
-                          baseMac[0], baseMac[1], baseMac[2],
-                          baseMac[3], baseMac[4], baseMac[5]);
-        }
-        else
-        {
-            Serial.print("Failed to read MAC address");
-        }
-        Serial.printf(" | Number of active connections %u\n", Agora.connected());
-        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
-        Serial.println();
-        AGORA_LOG_TRIBE_TABLE();
-        Serial.println();
-        AGORA_LOG_FRIEND_TABLE();
-        Serial.println("---------------------------------------------------------------------------------------------------------------------------------------\n\n\n");
+        doLog = true;
+        Serial.printf("Active connections changed from %d to %d\n", lastConnections, Agora.activeConnectionCount);
+        lastConnections = Agora.activeConnectionCount;
     }
+    if (interval > 0 && millis() - last_log > interval)
+    {
+        doLog = true;
+    }
+    if (!doLog)
+        return;
+
+    last_log = millis();
+    Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
+    Serial.printf("THE AGORA | Status for %s | ", Agora.name);
+    uint8_t baseMac[6];
+    esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
+    if (ret == ESP_OK)
+    {
+        Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x",
+                      baseMac[0], baseMac[1], baseMac[2],
+                      baseMac[3], baseMac[4], baseMac[5]);
+    }
+    else
+    {
+        Serial.print("Failed to read MAC address");
+    }
+    Serial.printf(" | Number of active connections %u\n", Agora.connected());
+    Serial.println("---------------------------------------------------------------------------------------------------------------------------------------");
+    Serial.println();
+    AGORA_LOG_TRIBE_TABLE();
+    Serial.println();
+    AGORA_LOG_FRIEND_TABLE();
+    Serial.println("---------------------------------------------------------------------------------------------------------------------------------------\n\n\n");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -457,8 +471,8 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
     if (address == 0)
     {
         uint8_t baseMac[6];
-        esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
-        address = ((baseMac[4] * 256 + baseMac[5]) % 512) + 1;          // generate DMX-Style Address from Mac Address;
+        esp_err_t ret = esp_efuse_mac_get_default(baseMac);
+        address = ((baseMac[4] * 256 + baseMac[5]) % 512) + 1; // generate DMX-Style Address from Mac Address;
     }
 
     if (addressInName)
@@ -473,6 +487,8 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
 
     name[AGORA_MAX_NAME_CHARACTERS] = 0;
     pingInterval = AGORA_DEFAULT_PING_INTERVAL;
+
+    AGORA_LOG_V("Enter the Agora as %s", name);
 
     xTaskCreate(
         agoraTask,    // Function that implements the task.
@@ -761,7 +777,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             buf[AGORA_MESSAGE_INVITE.size - 1] = 0;
             buf[AGORA_MESSAGE_INVITE.size - 2] = WiFi.channel();
             sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
-            if (Agora.logMessages)
+            if (Agora.eavesdrop)
             {
                 ("Sending Message: %s", buf);
             }
@@ -1043,6 +1059,10 @@ bool isMessage(const uint8_t *input, int len, AgoraMessage message)
 
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
+
+    if (Agora.eavesdrop){
+        AGORA_LOG_INCOMING_DATA(incomingData, len);
+    }
     if (Agora.ftpEnabled)
     {
         if (handle_agora_ftp(macAddr, incomingData, len))
@@ -1057,7 +1077,6 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
         }
     }
 
-    // AGORA_LOG_INCOMING_DATA(incomingData, len);
     uint16_t washandled = 0;
     if (isMessage(incomingData, len, AGORA_MESSAGE_POLICE))
     {
@@ -1150,7 +1169,7 @@ esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name)
     memset(buf, '.', message.size);
     buf[message.size - 1] = 0;
     sprintf(buf, "%s%s\0", message.string, name);
-    if (Agora.logMessages)
+    if (Agora.eavesdrop)
     {
         AGORA_LOG_V("Sending Message: %s", buf);
     }
@@ -1517,6 +1536,12 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
 
             char filepath[100];
             sprintf(filepath, "/%s", fileshareHeader.filename);
+            if (Fileshare_Filesystem.exists(filepath))
+            {
+                Serial.printf("File %s already exists. DELETING FILE.\n", filepath);
+                Fileshare_Filesystem.remove(filepath);
+            }
+
             fileReceiver.file = Fileshare_Filesystem.open(filepath, "w");
             if (!fileReceiver.file)
             {
@@ -1565,6 +1590,10 @@ void TheAgora::share(const char *path)
         return;
     }
     memcpy(fileSender.receiverMac, Agora.friends[0].mac, 6);
+    if (fileSender.file)
+    {
+        fileSender.file.close();
+    }
     fileSender.file = Fileshare_Filesystem.open(path);
     fileSender.nextReceiver = Agora.friendCount > 1 ? 1 : 0;
     if (!fileSender.file)

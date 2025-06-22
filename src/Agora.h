@@ -29,12 +29,21 @@
 #define AGORA_WIFI_PROV_SSID_OFFSET 20
 #define AGORA_WIFI_PROV_PASS_OFFSET 62
 
+typedef enum
+{
+    FTPUNKOWN,
+    RUNNING,
+    ERROR,
+    DONE,
+} ftpStatus_t;
+
 void agoraTask(void *);
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
-typedef void (*agora_share_cb_t)(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining);
-
 void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
-void dummySharinCallback(const uint8_t *mac, const char *filename, size_t filesize, size_t bytesRemaining);
+
+typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
+void dummySharinCallback(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
+
 #if ESP_IDF_VERSION_MAJOR < 5
 void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
 #else
@@ -45,7 +54,7 @@ void AGORA_LOG_STATUS(long interval = 5000);
 extern FS Fileshare_Filesystem;
 
 #define ESPNOW_FILESHARE_CHUNK_SIZE 240
-#define ESPNOW_FILESHARE_TIMEOUT 500
+#define ESPNOW_FILESHARE_TIMEOUT 1000
 
 typedef struct
 {
@@ -56,6 +65,7 @@ typedef struct
 
 typedef struct
 {
+    ftpStatus_t ftpStatus = FTPUNKOWN;
     uint8_t receiverMac[6];
     size_t bytesRemaining;
     long startTime;
@@ -67,6 +77,7 @@ typedef struct
 
 typedef struct
 {
+    ftpStatus_t ftpStatus = FTPUNKOWN;
     uint8_t senderMac[6];
     File file;
     long startTime;
@@ -220,4 +231,9 @@ void AGORA_LOG_MAC(const uint8_t *mac);
 void AGORA_LOG_RELATIONSHIP(relationship r);
 void AGORA_LOG_FRIEND(AgoraFriend f);
 
+
+
+
+void agora_ftp_send_header();
+void agora_ftp_send_chunk();
 #endif

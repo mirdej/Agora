@@ -44,7 +44,6 @@ agoraFileSender_t fileSender;
 agoraFileReceiver_t fileReceiver;
 FS Fileshare_Filesystem = SPIFFS;
 TaskHandle_t AgoraTaskHandle;
-
 //-----------------------------------------------------------------------------------------------------------------------------
 //                                                                                            LOGGING
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -1244,12 +1243,28 @@ void checkFTPTimeout()
         return;
     if (fileSender.bytesRemaining && millis() - fileSender.lastMessage > ESPNOW_FILESHARE_TIMEOUT)
     {
+        AGORA_LOG_E("File Sender Timeout, aborting file transfer");
         sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
-        resetFileShareInfo();
+
+        if (fileSender.nextReceiver)
+        {
+
+            AGORA_LOG_V("Sending file to next friend");
+            memcpy(fileSender.receiverMac, Agora.friends[fileSender.nextReceiver].mac, 6);
+            fileSender.nextReceiver = Agora.friendCount > fileSender.nextReceiver + 1 ? fileSender.nextReceiver + 1 : 0;
+            agora_ftp_send_header();
+        }
+
+        else
+        {
+            AGORA_LOG_E("No more receivers, resetting file share info");
+            resetFileShareInfo();
+        }
     }
 
     if (fileReceiver.bytesRemaining && millis() - fileReceiver.lastMessage > ESPNOW_FILESHARE_TIMEOUT)
     {
+        AGORA_LOG_E("File Receiver Timeout, aborting file transfer");
         sendMessage(fileReceiver.senderMac, AGORA_MESSAGE_FTP_ABORT);
         resetFileShareInfo();
     }
@@ -1375,7 +1390,7 @@ void agora_ftp_send_header()
         Serial.println("No file to share ???");
         return;
     }
-
+    fileSender.file.seek(0, SeekSet); // rewind the file to the beginning
     strcpy(fileshareHeader.magicword, "lookatthis");
     strcpy(fileshareHeader.filename, fileSender.file.name());
     fileshareHeader.filesize = fileSender.file.size();
@@ -1429,7 +1444,7 @@ void agora_ftp_send_chunk()
             sendMessage(fileSender.receiverMac, AGORA_MESSAGE_FTP_ABORT);
         }
     }
-    Agora.ftpCallback(fileSender.receiverMac, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
+    Agora.ftpCallback(fileSender.receiverMac, fileSender.ftpStatus, fileSender.file.name(), fileSender.file.size(), fileSender.bytesRemaining);
 
     if (fileSender.bytesRemaining == 0)
     {
@@ -1478,6 +1493,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
         {
             AGORA_LOG_E("Weird number of bytes received: %d.", len);
             AGORA_LOG_E("Should be %d or %d\n", fileReceiver.bytesRemaining, ESPNOW_FILESHARE_CHUNK_SIZE);
+            fileReceiver.ftpStatus = ERROR;      
             return false;
         }
         else
@@ -1491,6 +1507,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                 if (fileReceiver.bytesRemaining > 0)
                 {
                     const uint8_t mess[] = "gimmemore!";
+                    fileReceiver.ftpStatus = RUNNING;
                     esp_err_t result = esp_now_send(macAddr, mess, sizeof(mess));
                 }
                 else
@@ -1514,6 +1531,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                                        {
                     */
                     long timetaken = millis() - fileReceiver.startTime;
+                    fileReceiver.ftpStatus = DONE;
                     AGORA_LOG_V("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", fileshareHeader.filesize, timetaken / 1000, timetaken % 1000, fileshareHeader.filesize * 8000 / timetaken / 1024);
                     sendMessage(macAddr, AGORA_MESSAGE_FTP_DONE);
                     //}
@@ -1523,10 +1541,11 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
             {
 
                 AGORA_LOG_E("Error writing file");
+                fileReceiver.ftpStatus = ERROR;
                 resetFileShareInfo();
                 sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
-            Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
+            Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
 
             return true;
         }

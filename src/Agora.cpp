@@ -779,7 +779,9 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
             sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
             if (Agora.eavesdrop)
             {
-                ("Sending Message: %s", buf);
+                Serial.printf("Sending Message: %s to ", buf);
+                AGORA_LOG_MAC(macAddr);
+                Serial.println();
             }
             AgoraFriend *f = friendForMac(macAddr);
             if (f)
@@ -1060,7 +1062,10 @@ bool isMessage(const uint8_t *input, int len, AgoraMessage message)
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
 
-    if (Agora.eavesdrop){
+    if (Agora.eavesdrop)
+    {
+        AGORA_LOG_MAC(macAddr);
+        Serial.print(" ");
         AGORA_LOG_INCOMING_DATA(incomingData, len);
     }
     if (Agora.ftpEnabled)
@@ -1171,7 +1176,9 @@ esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name)
     sprintf(buf, "%s%s\0", message.string, name);
     if (Agora.eavesdrop)
     {
-        AGORA_LOG_V("Sending Message: %s", buf);
+        Serial.printf("Sending Message: %s to ", buf);
+        AGORA_LOG_MAC(macAddr);
+        Serial.println();
     }
     AgoraFriend *f = friendForMac(macAddr);
     if (f)

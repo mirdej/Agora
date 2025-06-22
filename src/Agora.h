@@ -117,6 +117,7 @@ struct TheAgora
 public:
     long timeout;
     long pingInterval;
+    int address;
     char name[AGORA_MAX_NAME_CHARACTERS + 1];
     AgoraFriend friends[AGORA_MAX_FRIENDS];
     AgoraTribe tribes[AGORA_MAX_TRIBES];
@@ -132,8 +133,8 @@ public:
     bool ftpEnabled;
     agora_share_cb_t ftpCallback;
 
-    void begin();
-    void begin(const char *newname, const char *caller = __BASE_FILE__);
+    void begin(bool addressInName = false);
+    void begin(const char *newname, bool addressInName = false, const char *caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
     void end();
     void tell(const char *text);
@@ -165,7 +166,7 @@ public:
     void setPingInterval(long ms);
     int connected() { return activeConnectionCount; }
 
-    void openTheGate(const char * ssid,const char * pass);
+    void openTheGate(const char *ssid, const char *pass);
 
 private:
 };

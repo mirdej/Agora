@@ -402,16 +402,75 @@ void TheAgora::setPingInterval(long ms)
     Otherwise, if we're a guru, check if we hear back from our followers from time to time or if we have lost them
 */
 
-void TheAgora::begin()
+void TheAgora::begin(bool addressInName)
 {
-    begin(AGORA_ANON_NAME);
+    begin(AGORA_ANON_NAME, addressInName);
 }
 
-void TheAgora::begin(const char *newname, const char *caller)
+void TheAgora::begin(const char *newname, bool addressInName, const char *caller)
 {
 
     strncpy(includedBy, caller, 127);
-    strncpy(name, newname, AGORA_MAX_NAME_CHARACTERS);
+
+    AgoraPreferences.begin("Agora");
+    Agora.address = AgoraPreferences.getInt("friendCount", 0);
+    Agora.friendCount = AgoraPreferences.getInt("friendCount", 0);
+    Agora.wifiChannel = AgoraPreferences.getInt("wifiChannel", 0);
+
+    if (Agora.friendCount > AGORA_MAX_FRIENDS)
+        Agora.friendCount = 0;
+
+    Agora.wifiChannel = constrain(Agora.wifiChannel, 1, ESP_NOW_MAX_CHANNEL);
+
+    AGORA_LOG_V("Recalling %u friends.", Agora.friendCount);
+    int storageBytes = 0;
+    int imAMaster, imASlave;
+    for (int i = 0; i < Agora.friendCount; i++)
+    {
+        char prefname[12];
+        sprintf(prefname, "friend%02d", i);
+        AgoraPreferences.getBytes(prefname, &Agora.friends[i], sizeof(AgoraFriend));
+        storageBytes += sizeof(AgoraFriend);
+        AGORA_LOG_FRIEND(Agora.friends[i]);
+        if (Agora.friends[i].meToThem == GURU)
+        {
+            imAMaster++;
+        }
+        else
+        {
+            imASlave++;
+        }
+        Agora.friends[i].lastMessageReceived = 0;
+        Agora.friends[i].lastMessageSent = 0;
+    }
+    AGORA_LOG_V("Recalled %d bytes.");
+    AgoraPreferences.end();
+
+    if (imAMaster > imASlave)
+    {
+        AGORA_LOG_V("I'm more of a GURU type of person");
+    }
+
+    char buf[AGORA_MAX_NAME_CHARACTERS + 1];
+    memset(buf, 0, AGORA_MAX_NAME_CHARACTERS + 1);
+
+    if (address == 0)
+    {
+        uint8_t baseMac[6];
+        esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
+        address = ((baseMac[4] * 256 + baseMac[5]) % 512) + 1;          // generate DMX-Style Address from Mac Address;
+    }
+
+    if (addressInName)
+    {
+        snprintf(buf, AGORA_MAX_NAME_CHARACTERS, "%s-%03u", newname, address);
+        strncpy(name, buf, AGORA_MAX_NAME_CHARACTERS);
+    }
+    else
+    {
+        strncpy(name, newname, AGORA_MAX_NAME_CHARACTERS);
+    }
+
     name[AGORA_MAX_NAME_CHARACTERS] = 0;
     pingInterval = AGORA_DEFAULT_PING_INTERVAL;
 
@@ -1067,12 +1126,12 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
 }
 
 #if ESP_IDF_VERSION_MAJOR < 5
-void OnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int len)
+void AgoraOnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
     generalCallback(macAddr, incomingData, len);
 }
 #else
-void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
+void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
 {
     generalCallback(esp_now_info->src_addr, incomingData, len);
 }
@@ -1177,44 +1236,6 @@ void agoraTask(void *)
 {
     AGORA_LOG_V("\n\n---------------------------\nStarting Agora Task\n\n");
 
-    AgoraPreferences.begin("Agora");
-    Agora.friendCount = AgoraPreferences.getInt("friendCount", 0);
-    Agora.wifiChannel = AgoraPreferences.getInt("wifiChannel", 0);
-
-    if (Agora.friendCount > AGORA_MAX_FRIENDS)
-        Agora.friendCount = 0;
-
-    Agora.wifiChannel = constrain(Agora.wifiChannel, 1, ESP_NOW_MAX_CHANNEL);
-
-    AGORA_LOG_V("Recalling %u friends.", Agora.friendCount);
-    int storageBytes = 0;
-    int imAMaster, imASlave;
-    for (int i = 0; i < Agora.friendCount; i++)
-    {
-        char prefname[12];
-        sprintf(prefname, "friend%02d", i);
-        AgoraPreferences.getBytes(prefname, &Agora.friends[i], sizeof(AgoraFriend));
-        storageBytes += sizeof(AgoraFriend);
-        AGORA_LOG_FRIEND(Agora.friends[i]);
-        if (Agora.friends[i].meToThem == GURU)
-        {
-            imAMaster++;
-        }
-        else
-        {
-            imASlave++;
-        }
-        Agora.friends[i].lastMessageReceived = 0;
-        Agora.friends[i].lastMessageSent = 0;
-    }
-    AGORA_LOG_V("Recalled %d bytes.");
-    AgoraPreferences.end();
-
-    if (imAMaster > imASlave)
-    {
-        AGORA_LOG_V("I'm more of a GURU type of person");
-    }
-
     // Start WiFI if not already done
     if (WiFi.getMode() == WIFI_MODE_NULL)
     {
@@ -1239,7 +1260,7 @@ void agoraTask(void *)
     // set callback routines
     /*       esp_now_register_send_cb(OnDataSent);
      */
-    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+    esp_now_register_recv_cb(esp_now_recv_cb_t(AgoraOnDataRecv));
 
     AGORA_LOG_V("IP address: %s", WiFi.localIP().toString().c_str());
     AGORA_LOG_V("MAC address: %s", WiFi.macAddress().c_str());

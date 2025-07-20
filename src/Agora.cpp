@@ -17,9 +17,6 @@ Preferences AgoraPreferences;
 
 esp_now_peer_info_t tempPeer;
 
-void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len) { ; }
-void dummySharinCallback(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining) { ; }
-
 AgoraMessage AGORA_MESSAGE_LOST = {"HALLLOOO??", 61};
 AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 52};
 AgoraMessage AGORA_MESSAGE_PRESENT = {"Hi, I'm ", 74};
@@ -257,11 +254,11 @@ char *TheAgora::getVersion()
 //                                                                                            IMPLEMENTATION
 
 //-----------------------------------------------------------------------------------------------------------------------------
-void TheAgora::establish(const char *name, bool autoPair)
+/* void TheAgora::establish(const char *name, bool autoPair)
 {
     TheAgora::establish(name, dummyCallback, autoPair);
 }
-
+ */
 void TheAgora::establish(const char *name, agora_cb_t cb, bool autoPair)
 {
 
@@ -290,11 +287,6 @@ void TheAgora::establish(const char *name, agora_cb_t cb, bool autoPair)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-
-void TheAgora::join(const char *name, bool autoPair)
-{
-    join(name, dummyCallback, autoPair);
-}
 
 void TheAgora::join(const char *name, agora_cb_t cb, bool autoPair)
 {
@@ -926,7 +918,10 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         AgoraTribe *theTribe = tribeNamed(f->tribe);
         if (theTribe)
         {
-            theTribe->callback(macAddr, incomingData, len);
+            if (theTribe->callback != NULL)
+            {
+                theTribe->callback(macAddr, incomingData, len);
+            }
             return 1;
         }
         else
@@ -1074,7 +1069,10 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         AgoraTribe *theTribe = tribeNamed(f->tribe);
         if (theTribe)
         {
-            theTribe->callback(macAddr, incomingData, len);
+            if (theTribe->callback != NULL)
+            {
+                theTribe->callback(macAddr, incomingData, len);
+            }
             return 1;
         }
         else

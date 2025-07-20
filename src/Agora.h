@@ -38,11 +38,9 @@ typedef enum
 } ftpStatus_t;
 
 void agoraTask(void *);
-typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
-void dummyCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
 
+typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
-void dummySharinCallback(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
 
 #if ESP_IDF_VERSION_MAJOR < 5
 void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
@@ -153,11 +151,11 @@ public:
     void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
     void tell(const char *name, char *buf, int len) { tell(name, (uint8_t *)buf, len); }
-    void establish(const char *name, bool autoPair = false);
-    void establish(const char *name, agora_cb_t cb, bool autoPair = false);
-    void join(const char *name, bool autoPair = false);
-    void join(String name, bool autoPair = false) { join(name.c_str(), autoPair); };
-    void join(const char *name, agora_cb_t cb, bool autoPair = false);
+/*     void establish(const char *name, bool autoPair = false);
+ */    void establish(const char *name, agora_cb_t cb = NULL, bool autoPair = false);
+ /*    void join(const char *name, bool autoPair = false);
+    void join(String name, bool autoPair = false) { join(name.c_str(), autoPair); }; */
+    void join(const char *name, agora_cb_t cb = NULL, bool autoPair = false);
     void conspire(int forSeconds = 20, const char *cult = NULL);
     char *getVersion();
     bool addFriend(AgoraFriend *newFriend);
@@ -165,7 +163,7 @@ public:
     void rememberFriends();
     void forgetFriends();
     void showID();
-    void enableFileSharing(fs::FS &fs = SPIFFS, agora_share_cb_t cb = dummySharinCallback)
+    void enableFileSharing(fs::FS &fs = SPIFFS, agora_share_cb_t cb = NULL)
     {
         ftpCallback = cb;
         ftpEnabled = true;

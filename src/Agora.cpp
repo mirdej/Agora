@@ -394,7 +394,7 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
 
             if (esp_now_send(friends[i].mac, buf, len) != ESP_OK)
             {
-                AGORA_LOG_E("Error sending message to all members");
+                AGORA_LOG_E("Error sending message to member %s",friends[i].name);
             }
             friends[i].lastMessageSent = millis();
         }
@@ -456,7 +456,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
         Agora.friends[i].lastMessageReceived = 0;
         Agora.friends[i].lastMessageSent = 0;
     }
-    AGORA_LOG_V("Recalled %d bytes.");
+    AGORA_LOG_V("Recalled %d bytes.",storageBytes);
     AgoraPreferences.end();
 
     if (imAMaster > imASlave)
@@ -691,7 +691,7 @@ void TheAgora::rememberFriends()
     }
     AgoraPreferences.putInt("wifiChannel", WiFi.channel());
     AgoraPreferences.end();
-    AGORA_LOG_V("Stored %d bytes (plus some).");
+    AGORA_LOG_V("Stored %d bytes (plus some).", storageBytes);
 }
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -1228,7 +1228,7 @@ void lookForNewGurus()
                 esp_now_del_peer(BROADCAST_ADDRESS);
                 EspNowAddPeer(BROADCAST_ADDRESS);
             }
-            AGORA_LOG_V("Sending %s", AGORA_MESSAGE_LOST.string);
+           // AGORA_LOG_V("Sending %s", AGORA_MESSAGE_LOST.string);
             AgoraFriend temp;
             memcpy(temp.mac, BROADCAST_ADDRESS, 6);
             sendMessage(&temp, AGORA_MESSAGE_LOST, Agora.tribes[i].name);

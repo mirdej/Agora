@@ -1,5 +1,7 @@
 /*TODOS
 
+Purge friends list, remove long time inactive members ???
+
 Tribe list does not get real updates (wifi channels ??)
 __BASE_FILE__ üath is no absolute
 
@@ -118,7 +120,7 @@ void AGORA_LOG_FRIEND_TABLE()
 void AGORA_LOG_TRIBE_TABLE()
 {
     Serial.println("Tribes");
-    Serial.println(" Type       | Chan | Name                           | Last seen | Last messaged");
+    Serial.println(" Type       | Chan | Name                           | Autopair | pair until ");
     Serial.println("-----------------------------------------------------------------------------------");
     for (int i = 0; i < Agora.tribeCount; i++)
     {
@@ -126,7 +128,7 @@ void AGORA_LOG_TRIBE_TABLE()
         AGORA_LOG_RELATIONSHIP(t.meToThem);
         Serial.print(" | ");
         Serial.printf("%4u | %-30s | ", t.channel, t.name);
-        Serial.printf("%9u | %9u\n", millis() - t.lastMessageReceived, millis() - t.lastMessageSent);
+        Serial.printf("%s | %9u\n", t.autoPair ? "Yes" : "No", t.pairUntil);
     }
     Serial.println("-----------------------------------------------------------------------------------");
 }
@@ -219,7 +221,7 @@ void idTask(void *)
     for (int i = 0; i < Agora.tribeCount; i++)
     {
         AgoraTribe t = Agora.tribes[i];
-        snprintf(buf, 240, "Tribe:%s|%u|%s|%u|%u", t.name, t.channel, r_strings[t.meToThem], millis() - t.lastMessageReceived, millis() - t.lastMessageSent);
+        snprintf(buf, 240, "Tribe:%s|%u|%s|%u|%u", t.name, t.channel, r_strings[t.meToThem], t.autoPair, t.pairUntil);
         Serial.println(buf);
         if (hasPoliceMac)
             esp_now_send(policeMac, (uint8_t *)buf, 240);
@@ -257,12 +259,12 @@ char *TheAgora::getVersion()
 //                                                                                            IMPLEMENTATION
 
 //-----------------------------------------------------------------------------------------------------------------------------
-void TheAgora::establish(const char *name)
+void TheAgora::establish(const char *name, bool autoPair)
 {
-    TheAgora::establish(name, dummyCallback);
+    TheAgora::establish(name, dummyCallback, autoPair);
 }
 
-void TheAgora::establish(const char *name, agora_cb_t cb)
+void TheAgora::establish(const char *name, agora_cb_t cb, bool autoPair)
 {
 
     if (Agora.tribeCount >= AGORA_MAX_TRIBES)
@@ -284,18 +286,19 @@ void TheAgora::establish(const char *name, agora_cb_t cb)
     newTribe.meToThem = GURU;
     newTribe.channel = WiFi.channel();
     newTribe.callback = cb;
+    newTribe.autoPair = autoPair;
     memcpy(&Agora.tribes[Agora.tribeCount], &newTribe, sizeof(AgoraTribe));
     Agora.tribeCount++;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-void TheAgora::join(const char *name)
+void TheAgora::join(const char *name, bool autoPair)
 {
-    join(name, dummyCallback);
+    join(name, dummyCallback, autoPair);
 }
 
-void TheAgora::join(const char *name, agora_cb_t cb)
+void TheAgora::join(const char *name, agora_cb_t cb, bool autoPair)
 {
 
     if (Agora.tribeCount >= AGORA_MAX_TRIBES)
@@ -316,8 +319,37 @@ void TheAgora::join(const char *name, agora_cb_t cb)
     memcpy(&newTribe.name, name, len);
     newTribe.meToThem = ASPIRING_FOLLOWER;
     newTribe.callback = cb;
+    newTribe.autoPair = autoPair;
     memcpy(&Agora.tribes[Agora.tribeCount], &newTribe, sizeof(AgoraTribe));
     Agora.tribeCount++;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// Start Pairing for cults that aren't pairing automatically
+void TheAgora::conspire(int forSeconds, const char *cult)
+{
+    for (int i = 0; i < tribeCount; i++)
+    {
+        if (cult == NULL || !strcmp(tribes[i].name, cult))
+        {
+            tribes[i].pairUntil = millis() + 1000 * forSeconds;
+
+            // A guru just has to listen to new membership requests
+            if (tribes[i].meToThem != GURU)
+            {
+                tribes[i].meToThem = ASPIRING_FOLLOWER;
+                //  forget my guru and start over
+                for (int f = 0; f < friendCount; f++)
+                {
+                    if (!strcmp(tribes[i].name, friends[f].tribe))
+                    {
+                        friends[f].meToThem = UNKNOWN;
+                        esp_now_del_peer(friends[f].mac);
+                    }
+                }
+            }
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -394,7 +426,7 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
 
             if (esp_now_send(friends[i].mac, buf, len) != ESP_OK)
             {
-                AGORA_LOG_E("Error sending message to member %s",friends[i].name);
+                AGORA_LOG_E("Error sending message to member %s", friends[i].name);
             }
             friends[i].lastMessageSent = millis();
         }
@@ -426,7 +458,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
     strncpy(includedBy, caller, 127);
 
     AgoraPreferences.begin("Agora");
-    Agora.address = AgoraPreferences.getInt("friendCount", 0);
+    Agora.address = AgoraPreferences.getInt("address", 0);
     Agora.friendCount = AgoraPreferences.getInt("friendCount", 0);
     Agora.wifiChannel = AgoraPreferences.getInt("wifiChannel", 0);
 
@@ -456,7 +488,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
         Agora.friends[i].lastMessageReceived = 0;
         Agora.friends[i].lastMessageSent = 0;
     }
-    AGORA_LOG_V("Recalled %d bytes.",storageBytes);
+    AGORA_LOG_V("Recalled %d bytes.", storageBytes);
     AgoraPreferences.end();
 
     if (imAMaster > imASlave)
@@ -498,6 +530,8 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
         &AgoraTaskHandle);
 }
 
+//----------------------------------------------------------------------------------------
+
 void TheAgora::end()
 {
     esp_now_deinit();
@@ -507,6 +541,7 @@ void TheAgora::end()
     }
     vTaskDelete(AgoraTaskHandle);
 }
+
 //----------------------------------------------------------------------------------------
 
 bool EspNowAddPeer(const uint8_t *peer_addr)
@@ -662,6 +697,11 @@ bool TheAgora::addFriend(AgoraFriend *newFriend)
 
 void TheAgora::forgetFriends()
 {
+    // remove peers so we don't accidentally reply to deleted friends
+    for (int i = 0; i < Agora.friendCount; i++)
+    {
+        esp_now_del_peer(Agora.friends[i].mac);
+    }
     Agora.friendCount = 0;
     AgoraPreferences.begin("Agora");
     AgoraPreferences.putInt("friendCount", Agora.friendCount);
@@ -708,7 +748,7 @@ void TheAgora::openTheGate(const char *ssid, const char *pass)
 //-----------------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------------------------------------------------
 // check if message is from a known member, if so, call this tribe's callback function
-bool amIaGuruForTribe(const char *name)
+bool tribe(const char *name)
 {
     for (int i = 0; i < Agora.tribeCount; i++)
     {
@@ -753,73 +793,87 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
 
     if (isMessage(incomingData, len, AGORA_MESSAGE_LOST))
     {
+
         char tribename[AGORA_MAX_NAME_CHARACTERS + 1];
         memcpy(tribename, incomingData + strlen(AGORA_MESSAGE_LOST.string), AGORA_MAX_NAME_CHARACTERS);
         tribename[AGORA_MAX_NAME_CHARACTERS] = 0;
         AGORA_LOG_MAC(macAddr);
         AGORA_LOG_V(" wants to join tribe *%s*, len %d", tribename, strlen(tribename));
 
-        if (amIaGuruForTribe(tribename))
+        AgoraTribe *t = tribeNamed(tribename);
+        if (t == NULL)
+            return 0; // not in my tribes list
+
+        if (t->meToThem != GURU)
+            return 0; // I am not a guru for this tribe
+
+        if (t->autoPair == false)
         {
-            AGORA_LOG_V("MATCH");
-            if (!EspNowAddPeer(macAddr))
+            if (millis() > t->pairUntil)
             {
+                return 0; // I am not accepting members right now
+            }
+        }
+
+        AGORA_LOG_V("MATCH");
+        if (!EspNowAddPeer(macAddr))
+        {
+            return 0;
+        }
+        AGORA_LOG_MAC(macAddr);
+        AGORA_LOG_V(" Send an invite. ")
+
+        // INVITE MESSAGE takes 11 chars, tribename max 30
+        // Length of total message: 52, fill before-last-byte of message [50] with channel number
+        char buf[AGORA_MESSAGE_INVITE.size];
+        memset(buf, '.', sizeof(buf));
+        buf[AGORA_MESSAGE_INVITE.size - 1] = 0;
+        buf[AGORA_MESSAGE_INVITE.size - 2] = WiFi.channel();
+        sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
+        if (Agora.eavesdrop)
+        {
+            Serial.printf("Sending Message: %s to ", buf);
+            AGORA_LOG_MAC(macAddr);
+            Serial.println();
+        }
+        AgoraFriend *f = friendForMac(macAddr);
+        if (f)
+            f->lastMessageSent = millis();
+
+        esp_now_send(macAddr, (uint8_t *)buf, AGORA_MESSAGE_INVITE.size);
+
+        /*   if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
+          {
+              AGORA_LOG_V("Failed to send to peer");
+              return 0;
+          } */
+
+        AgoraFriend *knownFriend = friendForMac(macAddr);
+        if (knownFriend)
+        {
+            knownFriend->meToThem = IN_CONTACT;
+            knownFriend->channel = WiFi.channel();
+            knownFriend->lastMessageReceived = millis();
+
+            AGORA_LOG_V("Nice to see you again, %s. Were you lost??", knownFriend->name);
+        }
+        else
+        {
+            AgoraFriend newFriend;
+            memcpy(newFriend.mac, macAddr, 6);
+            newFriend.channel = WiFi.channel();
+            newFriend.lastMessageReceived = millis();
+            newFriend.meToThem = IN_CONTACT;
+            strcpy(newFriend.name, "unknown");
+            strncpy(newFriend.tribe, tribename, AGORA_MAX_NAME_CHARACTERS);
+
+            if (!Agora.addFriend(&newFriend))
+            {
+                AGORA_LOG_V("Failed to add friend whose name I dont know yet");
                 return 0;
             }
-            AGORA_LOG_MAC(macAddr);
-            AGORA_LOG_V(" Send an invite. ")
-
-            // INVITE MESSAGE takes 11 chars, tribename max 30
-            // Length of total message: 52, fill before-last-byte of message [50] with channel number
-            char buf[AGORA_MESSAGE_INVITE.size];
-            memset(buf, '.', sizeof(buf));
-            buf[AGORA_MESSAGE_INVITE.size - 1] = 0;
-            buf[AGORA_MESSAGE_INVITE.size - 2] = WiFi.channel();
-            sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
-            if (Agora.eavesdrop)
-            {
-                Serial.printf("Sending Message: %s to ", buf);
-                AGORA_LOG_MAC(macAddr);
-                Serial.println();
-            }
-            AgoraFriend *f = friendForMac(macAddr);
-            if (f)
-                f->lastMessageSent = millis();
-            esp_now_send(macAddr, (uint8_t *)buf, AGORA_MESSAGE_INVITE.size);
-
-            /*   if (sendMessage(macAddr, AGORA_MESSAGE_INVITE, tribename) != ESP_OK)
-              {
-                  AGORA_LOG_V("Failed to send to peer");
-                  return 0;
-              } */
-
-            AgoraFriend *knownFriend = friendForMac(macAddr);
-            if (knownFriend)
-            {
-                knownFriend->meToThem = IN_CONTACT;
-                knownFriend->channel = WiFi.channel();
-                knownFriend->lastMessageReceived = millis();
-
-                AGORA_LOG_V("Nice to see you again, %s. Were you lost??", knownFriend->name);
-            }
-            else
-            {
-                AgoraFriend newFriend;
-                memcpy(newFriend.mac, macAddr, 6);
-                newFriend.channel = WiFi.channel();
-                newFriend.lastMessageReceived = millis();
-                newFriend.meToThem = IN_CONTACT;
-                strcpy(newFriend.name, "unknown");
-                strncpy(newFriend.tribe, tribename, AGORA_MAX_NAME_CHARACTERS);
-
-                if (!Agora.addFriend(&newFriend))
-                {
-                    AGORA_LOG_V("Failed to add friend whose name I dont know yet");
-                    return 0;
-                }
-            }
-            return 1;
         }
+        return 1;
     }
 
     else if (isMessage(incomingData, len, AGORA_MESSAGE_PRESENT))
@@ -856,7 +910,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
 
         AgoraTribe *theTribe = tribeNamed(theFriend->tribe);
         theTribe->meToThem = GURU;
-        theTribe->lastMessageReceived = millis();
+        // theTribe->lastMessageReceived = millis();
 
         Agora.rememberFriends();
         return 1;
@@ -996,7 +1050,7 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
 
         AgoraTribe *theTribe = tribeNamed(theFriend->tribe);
         theTribe->meToThem = FOLLOWER;
-        theTribe->lastMessageReceived = millis();
+        // theTribe->lastMessageReceived = millis();
 
         Agora.rememberFriends();
 
@@ -1199,6 +1253,15 @@ void lookForNewGurus()
 
     for (int i = 0; i < Agora.tribeCount; i++)
     {
+        if (Agora.tribes[i].autoPair == false)
+        {
+            if (millis() > Agora.tribes[i].pairUntil)
+            {
+                // skip this tribe if we're not allowed to pair
+                continue;
+            }
+        }
+
         if (Agora.tribes[i].meToThem == ASPIRING_FOLLOWER)
         {
             // see if were not acually following this triube
@@ -1228,7 +1291,7 @@ void lookForNewGurus()
                 esp_now_del_peer(BROADCAST_ADDRESS);
                 EspNowAddPeer(BROADCAST_ADDRESS);
             }
-           // AGORA_LOG_V("Sending %s", AGORA_MESSAGE_LOST.string);
+            // AGORA_LOG_V("Sending %s", AGORA_MESSAGE_LOST.string);
             AgoraFriend temp;
             memcpy(temp.mac, BROADCAST_ADDRESS, 6);
             sendMessage(&temp, AGORA_MESSAGE_LOST, Agora.tribes[i].name);

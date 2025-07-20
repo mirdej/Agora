@@ -138,7 +138,6 @@ public:
     int wifiChannel;
     int connectedPercent;
     bool eavesdrop;
-    bool logStatus;
     char version[64];
     char includedBy[128];
     bool ftpEnabled;

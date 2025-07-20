@@ -143,8 +143,6 @@ void AGORA_LOG_INCOMING_DATA(const uint8_t *d, int len)
 
 void AGORA_LOG_STATUS(long interval)
 {
-    if (!Agora.logStatus)
-        return;
     static long last_log;
     static int lastConnections;
     bool doLog = false;

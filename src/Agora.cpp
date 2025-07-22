@@ -559,7 +559,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
         Agora.wifiChannel = WiFi.channel();
     }
 
-    delay(1000);
+    //delay(1000);
     if (esp_now_init() != ESP_OK)
     {
         AGORA_LOG_E("Error initializing ESP-NOW");

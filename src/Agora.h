@@ -39,14 +39,25 @@ typedef enum
 
 void agoraTask(void *);
 
+#if ESP_IDF_VERSION_MAJOR < 5
+void AgoraOnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int len);
+#else
+void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
+#endif
+
+
+
+
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
 
-#if ESP_IDF_VERSION_MAJOR < 5
-void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
-#else
+/* #if ESP_IDF_VERSION_MAJOR < 5
+ */
+
+ void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+/* #else
 void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
-#endif
+#endif */
 void AGORA_LOG_STATUS(long interval = 5000);
 
 extern FS Fileshare_Filesystem;

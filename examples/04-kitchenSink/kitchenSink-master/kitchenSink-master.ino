@@ -12,6 +12,7 @@ https://github.com/mirdej/Agora
 
 // GPIO for pairing button
 #define PIN_PAIRING 2
+
 int lastButtonState;
 
 long lastMessage;

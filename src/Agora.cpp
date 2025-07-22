@@ -1268,7 +1268,7 @@ void lookForNewGurus()
                     if (!strcmp(Agora.friends[f].tribe, Agora.tribes[i].name))
                     {
                         Agora.tribes[i].meToThem = FOLLOWER;
-                        AGORA_LOG_V("Found my GURU for tribe %s: %s", Agora.tribes[i].name, Agora.friends[f].name);
+                        AGORA_LOG_V("Recalled my GURU for tribe %s: %s", Agora.tribes[i].name, Agora.friends[f].name);
                         return;
                     }
                 }

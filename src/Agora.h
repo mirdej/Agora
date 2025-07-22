@@ -151,11 +151,12 @@ public:
     void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
     void tell(const char *name, char *buf, int len) { tell(name, (uint8_t *)buf, len); }
-/*     void establish(const char *name, bool autoPair = false);
- */    void establish(const char *name, agora_cb_t cb = NULL, bool autoPair = false);
- /*    void join(const char *name, bool autoPair = false);
-    void join(String name, bool autoPair = false) { join(name.c_str(), autoPair); }; */
-    void join(const char *name, agora_cb_t cb = NULL, bool autoPair = false);
+    /*     void establish(const char *name, bool autoPair = false);
+     */
+    void establish(const char *name, agora_cb_t cb = NULL, bool autoPair = true);
+    /*    void join(const char *name, bool autoPair = false);
+       void join(String name, bool autoPair = false) { join(name.c_str(), autoPair); }; */
+    void join(const char *name, agora_cb_t cb = NULL, bool autoPair = true);
     void conspire(int forSeconds = 20, const char *cult = NULL);
     char *getVersion();
     bool addFriend(AgoraFriend *newFriend);
@@ -228,9 +229,6 @@ void AGORA_LOG_MAC(uint8_t *mac);
 void AGORA_LOG_MAC(const uint8_t *mac);
 void AGORA_LOG_RELATIONSHIP(relationship r);
 void AGORA_LOG_FRIEND(AgoraFriend f);
-
-
-
 
 void agora_ftp_send_header();
 void agora_ftp_send_chunk();

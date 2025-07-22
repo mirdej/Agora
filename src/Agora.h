@@ -115,6 +115,9 @@ struct AgoraFriend
     uint8_t mac[6];
 };
 
+AgoraFriend *friendForMac(const uint8_t *mac);
+AgoraFriend *friendForMac(uint8_t *mac);
+
 struct AgoraMessage
 {
     const char *string;
@@ -151,6 +154,9 @@ public:
     void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
     void tell(const char *name, char *buf, int len) { tell(name, (uint8_t *)buf, len); }
+
+    void answer(const uint8_t *mac, uint8_t *buf, int len);
+
     /*     void establish(const char *name, bool autoPair = false);
      */
     void establish(const char *name, agora_cb_t cb = NULL, bool autoPair = true);

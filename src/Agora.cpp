@@ -181,6 +181,23 @@ void AGORA_LOG_STATUS(long interval)
     Serial.println("---------------------------------------------------------------------------------------------------------------------------------------\n\n\n");
 }
 
+
+//-----------------------------------------------------------------------------------------------------------------------------
+
+#if ESP_IDF_VERSION_MAJOR < 5
+void AgoraOnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int len)
+{
+    generalCallback(macAddr, incomingData, len);
+}
+#else
+void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
+{
+    generalCallback(esp_now_info->src_addr, incomingData, len);
+}
+#endif
+
+
+
 //-----------------------------------------------------------------------------------------------------------------------------
 // This Task gets spawned if we are asked for ID by Agora-Police
 
@@ -424,6 +441,26 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+
+void TheAgora::answer(const uint8_t *mac, uint8_t *buf, int len)
+{
+    if ((ftpEnabled) && (fileSender.bytesRemaining || fileReceiver.bytesRemaining))
+    {
+        AGORA_LOG_E("Sharing a File, Please wait until done !!!");
+        return;
+    }
+    if (esp_now_send(mac, buf, len) != ESP_OK)
+    {
+        AGORA_LOG_E("Error sending message to peer");
+    }
+    AgoraFriend *knownFriend = friendForMac(mac);
+    if (knownFriend)
+    {
+        knownFriend->lastMessageSent = millis();
+    }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
 void TheAgora::setPingInterval(long ms)
 {
     pingInterval = (ms > 99) ? ms : 100;
@@ -510,6 +547,41 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
     pingInterval = AGORA_DEFAULT_PING_INTERVAL;
 
     AGORA_LOG_V("Enter the Agora as %s", name);
+
+    // Start WiFI if not already done
+    if (WiFi.getMode() == WIFI_MODE_NULL)
+    {
+        WiFi.mode(WIFI_STA);
+        ESP_ERROR_CHECK(esp_wifi_set_channel(Agora.wifiChannel > 0 ? Agora.wifiChannel : 1, WIFI_SECOND_CHAN_NONE));
+    }
+    else
+    {
+        Agora.wifiChannel = WiFi.channel();
+    }
+
+    delay(1000);
+    if (esp_now_init() != ESP_OK)
+    {
+        AGORA_LOG_E("Error initializing ESP-NOW");
+        return;
+    }
+    else
+    {
+        AGORA_LOG_V("Initialized ESP-NOW");
+    }
+    // set callback routines
+    /*       esp_now_register_send_cb(OnDataSent);
+     */
+    esp_now_register_recv_cb(esp_now_recv_cb_t(AgoraOnDataRecv));
+
+    AGORA_LOG_V("IP address: %s", WiFi.localIP().toString().c_str());
+    AGORA_LOG_V("MAC address: %s", WiFi.macAddress().c_str());
+    AGORA_LOG_V("WiFi channel: %d", WiFi.channel());
+
+    for (int i = 0; i < Agora.friendCount; i++)
+    {
+        EspNowAddPeer(Agora.friends[i].mac);
+    }
 
     xTaskCreate(
         agoraTask,    // Function that implements the task.
@@ -1198,18 +1270,6 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
     // AGORA_LOG_V("Message was handled %d times", washandled);
 }
 
-#if ESP_IDF_VERSION_MAJOR < 5
-void AgoraOnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int len)
-{
-    generalCallback(macAddr, incomingData, len);
-}
-#else
-void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len)
-{
-    generalCallback(esp_now_info->src_addr, incomingData, len);
-}
-#endif
-
 esp_err_t sendMessage(const uint8_t *macAddr, AgoraMessage message, char *name)
 {
     uint8_t buf[6];
@@ -1335,41 +1395,6 @@ void checkFTPTimeout()
 void agoraTask(void *)
 {
     AGORA_LOG_V("\n\n---------------------------\nStarting Agora Task\n\n");
-
-    // Start WiFI if not already done
-    if (WiFi.getMode() == WIFI_MODE_NULL)
-    {
-        WiFi.mode(WIFI_STA);
-        ESP_ERROR_CHECK(esp_wifi_set_channel(Agora.wifiChannel > 0 ? Agora.wifiChannel : 1, WIFI_SECOND_CHAN_NONE));
-    }
-    else
-    {
-        Agora.wifiChannel = WiFi.channel();
-    }
-
-    delay(1000);
-    if (esp_now_init() != ESP_OK)
-    {
-        AGORA_LOG_E("Error initializing ESP-NOW");
-        return;
-    }
-    else
-    {
-        AGORA_LOG_V("Initialized ESP-NOW");
-    }
-    // set callback routines
-    /*       esp_now_register_send_cb(OnDataSent);
-     */
-    esp_now_register_recv_cb(esp_now_recv_cb_t(AgoraOnDataRecv));
-
-    AGORA_LOG_V("IP address: %s", WiFi.localIP().toString().c_str());
-    AGORA_LOG_V("MAC address: %s", WiFi.macAddress().c_str());
-    AGORA_LOG_V("WiFi channel: %d", WiFi.channel());
-
-    for (int i = 0; i < Agora.friendCount; i++)
-    {
-        EspNowAddPeer(Agora.friends[i].mac);
-    }
 
     while (1)
     {

@@ -28,6 +28,8 @@ AgoraMessage AGORA_MESSAGE_FTP_DONE = {"GOT the file. Thanks.", 29};
 AgoraMessage AGORA_MESSAGE_FTP_ABORT = {"Fucked up. Over.", 19};
 AgoraMessage AGORA_MESSAGE_WIFI_PROV = {"Here's da kod:", 122};
 AgoraMessage AGORA_MESSAGE_SINGLE_INT = {"A", 1 + sizeof(int)};
+AgoraMessage AGORA_MESSAGE_DOUBLE_INT = {"B", 1 + 2 * sizeof(int)};
+AgoraMessage AGORA_MESSAGE_TRIPLE_INT = {"C", 1 + 3 * sizeof(int)};
 
 uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -384,6 +386,22 @@ int TheAgora::isPairing()
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
+void TheAgora::tell(const char *text)
+{
+    int len = strlen(text);
+    if (len > 249)
+    {
+        AGORA_LOG_E("Message truncated (was %d bytes, now 249)", len);
+        len = 249;
+    }
+    uint8_t buf[len];
+    memset(buf, 0, sizeof(buf));
+    strncpy((char *)buf, text, len);
+    tell(buf, len);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+
 void TheAgora::tell(const char *name, const char *text)
 {
     int len = strlen(text);
@@ -458,6 +476,29 @@ void TheAgora::tell(int a)
     uint8_t buf[len];
     strncpy((char *)buf, AGORA_MESSAGE_SINGLE_INT.string, 1);
     memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    tell(buf, len);
+}
+
+void TheAgora::tell(int a, int b)
+{
+    int len = 1 + sizeof(a) + sizeof(b);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_DOUBLE_INT.string, 1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    memcpy(&buf[1 + sizeof(a)], (uint8_t *)&b, sizeof(b));
+    tell(buf, len);
+}
+
+void TheAgora::tell(int a, int b, int c)
+{
+    int len = 1 + sizeof(a) + sizeof(b) + sizeof(c);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_TRIPLE_INT.string, 1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    memcpy(&buf[1 + sizeof(a)], (uint8_t *)&b, sizeof(b));
+    memcpy(&buf[1 + sizeof(a) + sizeof(b)], (uint8_t *)&c, sizeof(c));
     tell(buf, len);
 }
 
@@ -830,7 +871,7 @@ void TheAgora::openTheGate(const char *ssid, const char *pass)
     AgoraMessage message = AGORA_MESSAGE_WIFI_PROV;
     char buf[message.size];
     memset(buf, 0, message.size);
-    strcpy(buf,message.string);
+    strcpy(buf, message.string);
     memcpy(buf + AGORA_WIFI_PROV_SSID_OFFSET, ssid, AGORA_MAX_NAME_CHARACTERS);
     memcpy(buf + AGORA_WIFI_PROV_PASS_OFFSET, pass, AGORA_MAX_NAME_CHARACTERS);
     esp_now_send(NULL, (uint8_t *)buf, message.size);
@@ -1293,6 +1334,35 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
             int off = strlen(AGORA_MESSAGE_SINGLE_INT.string);
             memcpy(&a, &incomingData[off], sizeof(a));
             Agora.singleIntCallback(a);
+            return;
+        }
+    }
+    if (Agora.doubleIntCallback != NULL)
+    {
+        if (isMessage(incomingData, len, AGORA_MESSAGE_DOUBLE_INT))
+        {
+            int a, b = 0;
+            int off = strlen(AGORA_MESSAGE_DOUBLE_INT.string);
+            memcpy(&a, &incomingData[off], sizeof(a));
+            off += sizeof(a);
+            memcpy(&b, &incomingData[off], sizeof(b));
+            Agora.doubleIntCallback(a, b);
+            return;
+        }
+    }
+    if (Agora.tripleIntCallback != NULL)
+    {
+        if (isMessage(incomingData, len, AGORA_MESSAGE_TRIPLE_INT))
+        {
+            int a, b, c = 0;
+            int off = strlen(AGORA_MESSAGE_TRIPLE_INT.string);
+            memcpy(&a, &incomingData[off], sizeof(a));
+            off += sizeof(a);
+            memcpy(&b, &incomingData[off], sizeof(b));
+            off += sizeof(b);
+            memcpy(&c, &incomingData[off], sizeof(c));
+            Agora.tripleIntCallback(a, b, c);
+            return;
         }
     }
 

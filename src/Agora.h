@@ -31,14 +31,6 @@
 
 typedef enum
 {
-    UNDEFINED,
-    ONE_INT,
-    TWO_INTS,
-    THREE_INTS
-} agoraSimpleMessageHeader_t;
-
-typedef enum
-{
     FTPUNKOWN,
     RUNNING,
     ERROR,
@@ -57,6 +49,8 @@ typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int 
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
 
 typedef void (*agora_singleInt_cb_t)(int a);
+typedef void (*agora_doubleInt_cb_t)(int a, int b);
+typedef void (*agora_tripleInt_cb_t)(int a, int b, int c);
 
 /* #if ESP_IDF_VERSION_MAJOR < 5
  */
@@ -162,6 +156,8 @@ public:
     bool ftpEnabled;
     agora_share_cb_t ftpCallback = NULL;
     agora_singleInt_cb_t singleIntCallback = NULL;
+    agora_doubleInt_cb_t doubleIntCallback = NULL;
+    agora_tripleInt_cb_t tripleIntCallback = NULL;
 
     void begin(bool addressInName = false);
     void begin(const char *newname, bool addressInName = false, const char *caller = __BASE_FILE__);
@@ -211,7 +207,9 @@ public:
     void openTheGate(const char *ssid, const char *pass);
 
     void onInt(agora_singleInt_cb_t cb = NULL) { singleIntCallback = cb; }
-    
+    void onTwoInt(agora_doubleInt_cb_t cb = NULL) { doubleIntCallback = cb; }
+    void onThreeInt(agora_tripleInt_cb_t cb = NULL) { tripleIntCallback = cb; }
+
 private:
 };
 

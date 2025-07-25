@@ -207,6 +207,7 @@ public:
     int isConnected() { return connected(); }
     int isPairing();
 
+    void openTheGate(void);
     void openTheGate(const char *ssid, const char *pass);
 
     void onInt(agora_singleInt_cb_t cb = NULL) { singleIntCallback = cb; }

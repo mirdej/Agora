@@ -456,7 +456,7 @@ void TheAgora::tell(int a)
     int len = 1 + sizeof(a);
 
     uint8_t buf[len];
-    strncpy((char *)buf, AGORA_MESSAGE_SINGLE_INT.string,1);
+    strncpy((char *)buf, AGORA_MESSAGE_SINGLE_INT.string, 1);
     memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
     tell(buf, len);
 }
@@ -818,11 +818,19 @@ void TheAgora::rememberFriends()
 }
 //-----------------------------------------------------------------------------------------------------------------------------
 
+void TheAgora::openTheGate()
+{
+    wifi_config_t wifi_cfg;
+    esp_wifi_get_config(WIFI_IF_STA, &wifi_cfg);
+    openTheGate((const char *)wifi_cfg.sta.ssid, (const char *)wifi_cfg.sta.password);
+}
+
 void TheAgora::openTheGate(const char *ssid, const char *pass)
 {
     AgoraMessage message = AGORA_MESSAGE_WIFI_PROV;
     char buf[message.size];
     memset(buf, 0, message.size);
+    strcpy(buf,message.string);
     memcpy(buf + AGORA_WIFI_PROV_SSID_OFFSET, ssid, AGORA_MAX_NAME_CHARACTERS);
     memcpy(buf + AGORA_WIFI_PROV_PASS_OFFSET, pass, AGORA_MAX_NAME_CHARACTERS);
     esp_now_send(NULL, (uint8_t *)buf, message.size);
@@ -1248,7 +1256,7 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
         memcpy(ssid, incomingData + AGORA_WIFI_PROV_SSID_OFFSET, AGORA_MAX_NAME_CHARACTERS);
         memcpy(pass, incomingData + AGORA_WIFI_PROV_PASS_OFFSET, AGORA_MAX_NAME_CHARACTERS);
 
-        AGORA_LOG_V("Trying to conect to Wifi %s using password %s", ssid, pass);
+        AGORA_LOG_V("Trying to connect to Wifi %s using password %s", ssid, pass);
 
         WiFi.setHostname(Agora.name);
         WiFi.begin(ssid, pass);

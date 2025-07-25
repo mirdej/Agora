@@ -18,15 +18,16 @@ Preferences AgoraPreferences;
 esp_now_peer_info_t tempPeer;
 
 AgoraMessage AGORA_MESSAGE_LOST = {"HALLLOOO??", 61};
-AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 52};
-AgoraMessage AGORA_MESSAGE_PRESENT = {"Hi, I'm ", 74};
-AgoraMessage AGORA_MESSAGE_WELCOME = {"I'm your guru: ", 82};
+AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 53};
+AgoraMessage AGORA_MESSAGE_PRESENT = {"Hi, I'm ", 75};
+AgoraMessage AGORA_MESSAGE_WELCOME = {"I'm your guru: ", 83};
 AgoraMessage AGORA_MESSAGE_PING = {"Huh?", 4};
 AgoraMessage AGORA_MESSAGE_PONG = {"Ha!", 3};
 AgoraMessage AGORA_MESSAGE_POLICE = {"POLICE!Your ID Please!", 25};
 AgoraMessage AGORA_MESSAGE_FTP_DONE = {"GOT the file. Thanks.", 29};
 AgoraMessage AGORA_MESSAGE_FTP_ABORT = {"Fucked up. Over.", 19};
 AgoraMessage AGORA_MESSAGE_WIFI_PROV = {"Here's da kod:", 122};
+AgoraMessage AGORA_MESSAGE_SINGLE_INT = {"A", 1 + sizeof(int)};
 
 uint8_t BROADCAST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -181,7 +182,6 @@ void AGORA_LOG_STATUS(long interval)
     Serial.println("---------------------------------------------------------------------------------------------------------------------------------------\n\n\n");
 }
 
-
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #if ESP_IDF_VERSION_MAJOR < 5
@@ -195,8 +195,6 @@ void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *inc
     generalCallback(esp_now_info->src_addr, incomingData, len);
 }
 #endif
-
-
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // This Task gets spawned if we are asked for ID by Agora-Police
@@ -361,19 +359,30 @@ void TheAgora::conspire(int forSeconds, const char *cult)
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-void TheAgora::tell(const char *text)
+int TheAgora::isPairing()
 {
-    int len = strlen(text);
-    if (len > 249)
+    int pairCount = 0;
+    for (int i = 0; i < tribeCount; i++)
     {
-        AGORA_LOG_E("Message truncated (was %d bytes, now 249)", len);
-        len = 249;
+        if (millis() < tribes[i].pairUntil)
+        {
+            if (tribes[i].meToThem == GURU)
+            {
+                pairCount++;
+            }
+            else
+            {
+                if (tribes[i].meToThem != FOLLOWER)
+                {
+                    pairCount++;
+                }
+            }
+        }
     }
-    uint8_t buf[len];
-    memset(buf, 0, sizeof(buf));
-    strncpy((char *)buf, text, len);
-    tell(buf, len);
+    return pairCount;
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------
 
 void TheAgora::tell(const char *name, const char *text)
 {
@@ -438,6 +447,18 @@ void TheAgora::tell(const char *name, uint8_t *buf, int len)
             friends[i].lastMessageSent = millis();
         }
     }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+
+void TheAgora::tell(int a)
+{
+    int len = 1 + sizeof(a);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_SINGLE_INT.string,1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    tell(buf, len);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -559,7 +580,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
         Agora.wifiChannel = WiFi.channel();
     }
 
-    //delay(1000);
+    // delay(1000);
     if (esp_now_init() != ESP_OK)
     {
         AGORA_LOG_E("Error initializing ESP-NOW");
@@ -1253,6 +1274,18 @@ void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int le
             AGORA_LOG_V("Wifi Hostname: %s", WiFi.getHostname());
         }
         return;
+    }
+
+    // handle simple messages
+    if (Agora.singleIntCallback != NULL)
+    {
+        if (isMessage(incomingData, len, AGORA_MESSAGE_SINGLE_INT))
+        {
+            int a = 0;
+            int off = strlen(AGORA_MESSAGE_SINGLE_INT.string);
+            memcpy(&a, &incomingData[off], sizeof(a));
+            Agora.singleIntCallback(a);
+        }
     }
 
     for (int i = 0; i < Agora.tribeCount; i++)

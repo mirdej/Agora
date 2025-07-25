@@ -31,6 +31,14 @@
 
 typedef enum
 {
+    UNDEFINED,
+    ONE_INT,
+    TWO_INTS,
+    THREE_INTS
+} agoraSimpleMessageHeader_t;
+
+typedef enum
+{
     FTPUNKOWN,
     RUNNING,
     ERROR,
@@ -45,16 +53,15 @@ void AgoraOnDataRecv(const uint8_t *macAddr, const uint8_t *incomingData, int le
 void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
 #endif
 
-
-
-
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
+
+typedef void (*agora_singleInt_cb_t)(int a);
 
 /* #if ESP_IDF_VERSION_MAJOR < 5
  */
 
- void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
+void generalCallback(const uint8_t *mac, const uint8_t *incomingData, int len);
 /* #else
 void generalCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len);
 #endif */
@@ -112,7 +119,7 @@ struct AgoraTribe
     bool autoPair;
     long pairUntil;
     int channel;
-    agora_cb_t callback;
+    agora_cb_t callback = NULL;
 };
 
 struct AgoraFriend
@@ -153,18 +160,23 @@ public:
     char version[64];
     char includedBy[128];
     bool ftpEnabled;
-    agora_share_cb_t ftpCallback;
+    agora_share_cb_t ftpCallback = NULL;
+    agora_singleInt_cb_t singleIntCallback = NULL;
 
     void begin(bool addressInName = false);
     void begin(const char *newname, bool addressInName = false, const char *caller = __BASE_FILE__);
     void begin(String name) { begin(name.c_str()); };
     void end();
+
     void tell(const char *text);
     void tell(const char *name, const char *text);
     void tell(uint8_t *buf, int len);
     void tell(char *buf, int len) { tell((uint8_t *)buf, len); }
     void tell(const char *name, uint8_t *buf, int len);
     void tell(const char *name, char *buf, int len) { tell(name, (uint8_t *)buf, len); }
+    void tell(int a);
+    void tell(int a, int b);
+    void tell(int a, int b, int c);
 
     void answer(const uint8_t *mac, uint8_t *buf, int len);
 
@@ -192,9 +204,13 @@ public:
     void giveUpAfterSeconds(int seconds) { timeout = seconds * 1000; };
     void setPingInterval(long ms);
     int connected() { return activeConnectionCount; }
+    int isConnected() { return connected(); }
+    int isPairing();
 
     void openTheGate(const char *ssid, const char *pass);
 
+    void onInt(agora_singleInt_cb_t cb = NULL) { singleIntCallback = cb; }
+    
 private:
 };
 

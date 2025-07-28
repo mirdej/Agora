@@ -205,7 +205,7 @@ uint8_t policeMac[6] = {0, 0, 0, 0, 0, 0};
 
 void idTask(void *)
 {
-    randomSeed(analogRead(A0));
+    randomSeed(millis());
     delay(random(3000));
     char buf[240];
 
@@ -216,14 +216,15 @@ void idTask(void *)
     }
     multi_heap_info_t info;
     heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    snprintf(buf, 240, "Name:%s|Chip:%s|Flash:%u|FreeRam:%u|SDK:%s|IP:%s|Channel:%u|", Agora.name, ESP.getChipModel(), ESP.getFlashChipSize(), info.total_free_bytes, ESP.getSdkVersion(), WiFi.localIP().toString().c_str(), WiFi.channel());
+
+    snprintf(buf, 240, "1|AgoraVersion:%s|Name:%s|Chip:%s|Flash:%u|FreeRam:%u|SDK:%s|IP:%s|Channel:%u|", Agora.getVersion(),Agora.name, ESP.getChipModel(), ESP.getFlashChipSize(), info.total_free_bytes, ESP.getSdkVersion(), WiFi.localIP().toString().c_str(), WiFi.channel());
     Serial.println(buf);
     if (hasPoliceMac)
         esp_now_send(policeMac, (uint8_t *)buf, 240);
 
     delay(100);
 
-    snprintf(buf, 240, "Friends:%u|Tribes:%u|AgoraVersion:%s|File:%s|Date:%s|", Agora.friendCount, Agora.tribeCount, Agora.getVersion(), Agora.includedBy, __DATE__);
+    snprintf(buf, 240, "2|Friends:%u|Tribes:%u||File:%s|Date:%s|", Agora.friendCount, Agora.tribeCount, Agora.includedBy, __DATE__);
     Serial.println(buf);
     if (hasPoliceMac)
         esp_now_send(policeMac, (uint8_t *)buf, 240);
@@ -233,7 +234,7 @@ void idTask(void *)
     for (int i = 0; i < Agora.tribeCount; i++)
     {
         AgoraTribe t = Agora.tribes[i];
-        snprintf(buf, 240, "Tribe:%s|%u|%s|%u|%u", t.name, t.channel, r_strings[t.meToThem], t.autoPair, t.pairUntil);
+        snprintf(buf, 240, "3|Tribe:%s|%u|%s|%u|%u", t.name, t.channel, r_strings[t.meToThem], t.autoPair, t.pairUntil);
         Serial.println(buf);
         if (hasPoliceMac)
             esp_now_send(policeMac, (uint8_t *)buf, 240);
@@ -244,7 +245,7 @@ void idTask(void *)
     {
         AgoraFriend f = Agora.friends[i];
 
-        snprintf(buf, 240, "Friend:%02x:%02x:%02x:%02x:%02x:%02x|%u|%s|%s|%s|%u|%u",
+        snprintf(buf, 240, "4|Friend:%02x:%02x:%02x:%02x:%02x:%02x|%u|%s|%s|%s|%u|%u",
                  f.mac[0], f.mac[1], f.mac[2], f.mac[3], f.mac[4], f.mac[5],
                  f.channel, f.name, f.tribe, r_strings[f.meToThem], millis() - f.lastMessageReceived, millis() - f.lastMessageSent);
         Serial.println(buf);

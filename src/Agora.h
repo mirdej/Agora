@@ -175,6 +175,7 @@ public:
     void tell(int a, int b, int c);
 
     void answer(const uint8_t *mac, uint8_t *buf, int len);
+    void answer(const uint8_t *mac, const char *buf);
 
     /*     void establish(const char *name, bool autoPair = false);
      */

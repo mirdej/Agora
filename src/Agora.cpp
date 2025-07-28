@@ -217,7 +217,7 @@ void idTask(void *)
     multi_heap_info_t info;
     heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
-    snprintf(buf, 240, "1|AgoraVersion:%s|Name:%s|Chip:%s|Flash:%u|FreeRam:%u|SDK:%s|IP:%s|Channel:%u|", Agora.getVersion(),Agora.name, ESP.getChipModel(), ESP.getFlashChipSize(), info.total_free_bytes, ESP.getSdkVersion(), WiFi.localIP().toString().c_str(), WiFi.channel());
+    snprintf(buf, 240, "1|AgoraVersion:%s|Name:%s|Chip:%s|Flash:%u|FreeRam:%u|SDK:%s|IP:%s|Channel:%u|", Agora.getVersion(), Agora.name, ESP.getChipModel(), ESP.getFlashChipSize(), info.total_free_bytes, ESP.getSdkVersion(), WiFi.localIP().toString().c_str(), WiFi.channel());
     Serial.println(buf);
     if (hasPoliceMac)
         esp_now_send(policeMac, (uint8_t *)buf, 240);
@@ -521,6 +521,20 @@ void TheAgora::answer(const uint8_t *mac, uint8_t *buf, int len)
     {
         knownFriend->lastMessageSent = millis();
     }
+}
+
+void TheAgora::answer(const uint8_t *mac, const char *text)
+{
+    int len = strlen(text);
+    if (len > 249)
+    {
+        AGORA_LOG_E("Message truncated (was %d bytes, now 249)", len);
+        len = 249;
+    }
+    uint8_t buf[len];
+    memset(buf, 0, sizeof(buf));
+    strncpy((char *)buf, text, len);
+    answer(mac, buf, len);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------

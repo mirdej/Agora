@@ -183,7 +183,7 @@ public:
     /*    void join(const char *name, bool autoPair = false);
        void join(String name, bool autoPair = false) { join(name.c_str(), autoPair); }; */
     void join(const char *name, agora_cb_t cb = NULL, bool autoPair = true);
-    void conspire(int forSeconds = 20, const char *cult = NULL);
+    void conspire(int forMillis = 20000, const char *cult = NULL);
     char *getVersion();
     bool addFriend(AgoraFriend *newFriend);
 

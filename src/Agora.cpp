@@ -334,13 +334,13 @@ void TheAgora::join(const char *name, agora_cb_t cb, bool autoPair)
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Start Pairing for cults that aren't pairing automatically
-void TheAgora::conspire(int forSeconds, const char *cult)
+void TheAgora::conspire(int forMillis, const char *cult)
 {
     for (int i = 0; i < tribeCount; i++)
     {
         if (cult == NULL || !strcmp(tribes[i].name, cult))
         {
-            tribes[i].pairUntil = millis() + 1000 * forSeconds;
+            tribes[i].pairUntil = millis() + forMillis;
 
             // A guru just has to listen to new membership requests
             if (tribes[i].meToThem != GURU)

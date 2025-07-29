@@ -47,6 +47,8 @@ void AgoraOnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *inc
 
 typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int len);
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
+typedef void (*agora_shareDone_cb_t)(const char *filename);
+
 
 typedef void (*agora_singleInt_cb_t)(int a);
 typedef void (*agora_doubleInt_cb_t)(int a, int b);
@@ -155,6 +157,7 @@ public:
     char includedBy[128];
     bool ftpEnabled;
     agora_share_cb_t ftpCallback = NULL;
+    agora_shareDone_cb_t ftpDoneCallback = NULL;
     agora_singleInt_cb_t singleIntCallback = NULL;
     agora_doubleInt_cb_t doubleIntCallback = NULL;
     agora_tripleInt_cb_t tripleIntCallback = NULL;
@@ -211,6 +214,7 @@ public:
     void onTwoInt(agora_doubleInt_cb_t cb = NULL) { doubleIntCallback = cb; }
     void onThreeInt(agora_tripleInt_cb_t cb = NULL) { tripleIntCallback = cb; }
 
+    void onFileReceived(agora_shareDone_cb_t cb = NULL) {ftpDoneCallback = cb;}
 private:
 };
 

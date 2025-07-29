@@ -1734,7 +1734,7 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                         AGORA_LOG_E("TOO MANY BYTES RECEIVED ????");
                     }
                     fileReceiver.file.close();
-                    delay(200);
+                    // delay(200);
                     /* char filepath[100];
                    sprintf(filepath, "/%s", fileshareHeader.filename);
                                       File file = SD.open(filepath, "r");
@@ -1751,6 +1751,9 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                     fileReceiver.ftpStatus = DONE;
                     AGORA_LOG_V("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", fileshareHeader.filesize, timetaken / 1000, timetaken % 1000, fileshareHeader.filesize * 8000 / timetaken / 1024);
                     sendMessage(macAddr, AGORA_MESSAGE_FTP_DONE);
+                    if (Agora.ftpDoneCallback != NULL) {
+                        Agora.ftpDoneCallback(fileshareHeader.filename);
+                    }
                     //}
                 }
             }
@@ -1763,14 +1766,16 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                 sendMessage(macAddr, AGORA_MESSAGE_FTP_ABORT);
             }
 
-            if (fileReceiver.file)
+            if (Agora.ftpCallback != NULL)
             {
-
-                Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
-            }
-            else
-            {
-                Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, "No file", 0, fileReceiver.bytesRemaining);
+                if (fileReceiver.file)
+                {
+                    Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, fileReceiver.file.name(), fileshareHeader.filesize, fileReceiver.bytesRemaining);
+                }
+                else
+                {
+                    Agora.ftpCallback(fileReceiver.senderMac, fileReceiver.ftpStatus, "No file", 0, fileReceiver.bytesRemaining);
+                }
             }
 
             return true;

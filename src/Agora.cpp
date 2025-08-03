@@ -573,7 +573,7 @@ void TheAgora::begin(const char *newname, bool addressInName, const char *caller
 
     AGORA_LOG_V("Recalling %u friends.", Agora.friendCount);
     int storageBytes = 0;
-    int imAMaster, imASlave;
+    int imAMaster = 0, imASlave = 0;
     for (int i = 0; i < Agora.friendCount; i++)
     {
         char prefname[12];
@@ -887,8 +887,10 @@ void TheAgora::openTheGate(const char *ssid, const char *pass)
     char buf[message.size];
     memset(buf, 0, message.size);
     strcpy(buf, message.string);
-    memcpy(buf + AGORA_WIFI_PROV_SSID_OFFSET, ssid, AGORA_MAX_NAME_CHARACTERS);
-    memcpy(buf + AGORA_WIFI_PROV_PASS_OFFSET, pass, AGORA_MAX_NAME_CHARACTERS);
+    strncpy(buf + AGORA_WIFI_PROV_SSID_OFFSET, ssid, AGORA_MAX_NAME_CHARACTERS - 1);
+    buf[AGORA_WIFI_PROV_SSID_OFFSET + AGORA_MAX_NAME_CHARACTERS - 1] = '\0';
+    strncpy(buf + AGORA_WIFI_PROV_PASS_OFFSET, pass, AGORA_MAX_NAME_CHARACTERS - 1);
+    buf[AGORA_WIFI_PROV_PASS_OFFSET + AGORA_MAX_NAME_CHARACTERS - 1] = '\0';
     esp_now_send(NULL, (uint8_t *)buf, message.size);
 }
 
@@ -927,7 +929,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         return 0; // Gurus don't get pinged
     }
 
-    bool message_is_from_a_friend;
+    bool message_is_from_a_friend = false;
 
     for (int i = 0; i < Agora.friendCount; i++)
     {
@@ -976,7 +978,7 @@ int handleAgoraMessageAsGuru(const uint8_t *macAddr, const uint8_t *incomingData
         memset(buf, '.', sizeof(buf));
         buf[AGORA_MESSAGE_INVITE.size - 1] = 0;
         buf[AGORA_MESSAGE_INVITE.size - 2] = WiFi.channel();
-        sprintf(buf, "%s%s\0", AGORA_MESSAGE_INVITE.string, tribename);
+        snprintf(buf, sizeof(buf), "%s%s", AGORA_MESSAGE_INVITE.string, tribename);
         if (Agora.eavesdrop)
         {
             Serial.printf("Sending Message: %s to ", buf);
@@ -1186,7 +1188,7 @@ int handleAgoraMessageAsMember(const uint8_t *macAddr, const uint8_t *incomingDa
         if (!theFriend)
         {
             AGORA_LOG_MAC(macAddr);
-            AGORA_LOG_E(" Cannot find this Guru anymaore.")
+            AGORA_LOG_E(" Cannot find this Guru anymaore.");
             return 0;
         }
 
@@ -1408,7 +1410,7 @@ esp_err_t sendMessage(uint8_t *macAddr, AgoraMessage message, char *name)
     char buf[message.size];
     memset(buf, '.', message.size);
     buf[message.size - 1] = 0;
-    sprintf(buf, "%s%s\0", message.string, name);
+    snprintf(buf, sizeof(buf), "%s%s", message.string, name);
     if (Agora.eavesdrop)
     {
         Serial.printf("Sending Message: %s to ", buf);

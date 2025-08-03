@@ -815,7 +815,7 @@ bool TheAgora::addFriend(AgoraFriend *newFriend)
     }
 
     // see if friend exists
-    for (int i; i < friendCount; i++)
+    for (int i = 0; i < friendCount; i++)
     {
         if (macMatch(&friends[i], newFriend))
         {

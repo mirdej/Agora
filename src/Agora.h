@@ -49,7 +49,6 @@ typedef void (*agora_cb_t)(const uint8_t *mac, const uint8_t *incomingData, int 
 typedef void (*agora_share_cb_t)(const uint8_t *mac, ftpStatus_t status, const char *filename, size_t filesize, size_t bytesRemaining);
 typedef void (*agora_shareDone_cb_t)(const char *filename);
 
-
 typedef void (*agora_singleInt_cb_t)(int a);
 typedef void (*agora_doubleInt_cb_t)(int a, int b);
 typedef void (*agora_tripleInt_cb_t)(int a, int b, int c);
@@ -156,6 +155,7 @@ public:
     char version[64];
     char includedBy[128];
     bool ftpEnabled;
+    uint8_t cbCallerMac[6];
     agora_share_cb_t ftpCallback = NULL;
     agora_shareDone_cb_t ftpDoneCallback = NULL;
     agora_singleInt_cb_t singleIntCallback = NULL;
@@ -177,6 +177,11 @@ public:
     void tell(int a, int b);
     void tell(int a, int b, int c);
 
+    void answer(int a);
+    void answer(int a, int b);
+    void answer(int a, int b, int c);
+    void answer(uint8_t *buf, int len);
+    void answer(const char *buf);
     void answer(const uint8_t *mac, uint8_t *buf, int len);
     void answer(const uint8_t *mac, const char *buf);
 
@@ -214,7 +219,8 @@ public:
     void onTwoInt(agora_doubleInt_cb_t cb = NULL) { doubleIntCallback = cb; }
     void onThreeInt(agora_tripleInt_cb_t cb = NULL) { tripleIntCallback = cb; }
 
-    void onFileReceived(agora_shareDone_cb_t cb = NULL) {ftpDoneCallback = cb;}
+    void onFileReceived(agora_shareDone_cb_t cb = NULL) { ftpDoneCallback = cb; }
+
 private:
 };
 

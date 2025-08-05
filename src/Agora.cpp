@@ -505,6 +505,51 @@ void TheAgora::tell(int a, int b, int c)
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
+
+void TheAgora::answer(int a)
+{
+    int len = 1 + sizeof(a);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_SINGLE_INT.string, 1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    answer(buf, len);
+}
+
+
+void TheAgora::answer(int a, int b)
+{
+    int len = 1 + sizeof(a) + sizeof(b);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_DOUBLE_INT.string, 1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    memcpy(&buf[1 + sizeof(a)], (uint8_t *)&b, sizeof(b));
+    answer(buf, len);
+}
+
+void TheAgora::answer(int a, int b, int c)
+{
+    int len = 1 + sizeof(a) + sizeof(b) + sizeof(c);
+
+    uint8_t buf[len];
+    strncpy((char *)buf, AGORA_MESSAGE_TRIPLE_INT.string, 1);
+    memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
+    memcpy(&buf[1 + sizeof(a)], (uint8_t *)&b, sizeof(b));
+    memcpy(&buf[1 + sizeof(a) + sizeof(b)], (uint8_t *)&c, sizeof(c));
+    answer(buf, len);
+}
+
+void TheAgora::answer(const char *buf)
+{
+    answer(cbCallerMac, buf);
+}
+
+void TheAgora::answer(uint8_t *buf, int len)
+{
+    answer(cbCallerMac, buf, len);
+}
+
 void TheAgora::answer(const uint8_t *mac, uint8_t *buf, int len)
 {
     if ((ftpEnabled) && (fileSender.bytesRemaining || fileReceiver.bytesRemaining))
@@ -512,6 +557,7 @@ void TheAgora::answer(const uint8_t *mac, uint8_t *buf, int len)
         AGORA_LOG_E("Sharing a File, Please wait until done !!!");
         return;
     }
+
     if (esp_now_send(mac, buf, len) != ESP_OK)
     {
         AGORA_LOG_E("Error sending message to peer");
@@ -1269,6 +1315,7 @@ bool isMessage(const uint8_t *input, int len, AgoraMessage message)
 
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
+    memcpy(Agora.cbCallerMac, macAddr, 6);
 
     if (Agora.eavesdrop)
     {
@@ -1753,7 +1800,8 @@ bool handle_agora_ftp(const uint8_t *macAddr, const uint8_t *incomingData, int l
                     fileReceiver.ftpStatus = DONE;
                     AGORA_LOG_V("SUCCESS: File written %d bytes in %d.%d seconds (%d kbit/s)", fileshareHeader.filesize, timetaken / 1000, timetaken % 1000, fileshareHeader.filesize * 8000 / timetaken / 1024);
                     sendMessage(macAddr, AGORA_MESSAGE_FTP_DONE);
-                    if (Agora.ftpDoneCallback != NULL) {
+                    if (Agora.ftpDoneCallback != NULL)
+                    {
                         Agora.ftpDoneCallback(fileshareHeader.filename);
                     }
                     //}

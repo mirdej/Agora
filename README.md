@@ -11,7 +11,7 @@ The Agora is the public space where ESP32 devices meet and communicate. ESPs gat
 
 ## Model
 
-When a device is powered on it goes out looking for the tribes it belongs to. If it is a Guru it will just listen for lost membvers wanting to join. If it is a trime member then it will start shouting out into the Agora trying to find its Guru.
+When a device is powered on it goes out looking for the tribes it belongs to. If it is a Guru it will just listen for lost members wanting to join. If it is a trime member then it will start shouting out into the Agora trying to find its Guru.
 
 1) If a guru hears a lost member looking for the tribe it will send an (private) invitation to join the tribe.
 2) The new device will answer with its name and MAC address.

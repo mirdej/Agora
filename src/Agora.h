@@ -8,15 +8,23 @@
   MIT License
   */
 
-#include "Arduino.h"
+// #include "Arduino.h"
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+#define esp_err_t int
+#else
 #include "WiFi.h"
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include "esp_idf_version.h"
-#include <esp_now.h>
-#include "FS.h"
 #include "SPIFFS.h"
 #include "Preferences.h"
+#endif
+
+#include "LittleFS.h"
+
+#include "FS.h"
 #include "SD.h"
 
 #define AGORA_DEFAULT_PING_INTERVAL 2000

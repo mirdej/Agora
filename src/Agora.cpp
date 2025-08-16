@@ -10,12 +10,14 @@ ALSO E (45996) ESPNOW: Peer channel is not equal to the home channel, send fail!
 */
 
 #include "Agora.h"
+#ifdef ESP8266
+#else
 #include "esp_mac.h"
+Preferences AgoraPreferences;
+esp_now_peer_info_t tempPeer;
+#endif
 
 TheAgora Agora;
-Preferences AgoraPreferences;
-
-esp_now_peer_info_t tempPeer;
 
 AgoraMessage AGORA_MESSAGE_LOST = {"HALLLOOO??", 61};
 AgoraMessage AGORA_MESSAGE_INVITE = {"PLZDM_ME!!", 53};
@@ -505,7 +507,6 @@ void TheAgora::tell(int a, int b, int c)
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-
 void TheAgora::answer(int a)
 {
     int len = 1 + sizeof(a);
@@ -515,7 +516,6 @@ void TheAgora::answer(int a)
     memcpy(&buf[1], (uint8_t *)&a, sizeof(a));
     answer(buf, len);
 }
-
 
 void TheAgora::answer(int a, int b)
 {
@@ -1316,6 +1316,9 @@ bool isMessage(const uint8_t *input, int len, AgoraMessage message)
 void generalCallback(const uint8_t *macAddr, const uint8_t *incomingData, int len)
 {
     memcpy(Agora.cbCallerMac, macAddr, 6);
+    AgoraFriend *f = friendForMac(macAddr);
+    if (f)
+        f->lastMessageReceived = millis();
 
     if (Agora.eavesdrop)
     {
